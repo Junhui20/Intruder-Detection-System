@@ -1,0 +1,36 @@
+camera:
+  buffer_size: 1
+  connection_timeout: 2
+detection:
+  batch_processing: false
+  enable_gpu_acceleration: true
+  enable_model_optimization: true
+  face_detection_method: hog
+  max_faces_per_frame: 5
+  yolo_confidence: 0.6
+  yolo_iou_threshold: 0.5
+  yolo_max_detections: 50
+gui:
+  auto_refresh_interval: 200
+  enable_real_time_controls: true
+  show_performance_metrics: true
+performance:
+  enable_gpu: true
+  enable_performance_monitoring: true
+  max_cpu_usage: 85.0
+  max_memory_usage: 6144
+telegram:
+  # bot_token: REMOVED FOR SECURITY - Set TELEGRAM_BOT_TOKEN environment variable
+  cooldown: 20.0
+  enabled_commands:
+  - check
+  - status
+  - help
+  photo_quality: 85.0
+  polling_interval: 3.5465909090909093
+  send_photos: true
+video:
+  frame_height: 360
+  frame_width: 480
+  process_every_n_frames: 2
+  target_fps: 30
