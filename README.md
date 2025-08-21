@@ -290,14 +290,6 @@ python scripts/migrate_database.py  # Set up SQLite database
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🆘 Support
-
-- 📧 Email: support@intruder-detection.com
-- 📖 Documentation: [docs/](docs/)
-- 🐛 Issues: [GitHub Issues](https://github.com/your-repo/issues)
-
----
-
 **Version**: 1.0.0  
 **Last Updated**: January 2025  
 **Platform**: Windows 11  
