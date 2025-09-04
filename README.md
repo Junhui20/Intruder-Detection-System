@@ -1,5 +1,13 @@
 # 🚀 Low Cost Intruder Detection System 2025
 
+## 📸 System Screenshots
+
+![Real-time Detection](Images/Real_time.jpg)
+*Real-time intruder detection with live camera feed and AI-powered recognition*
+
+![Detection Dashboard](Images/Detection_page.jpg)
+*Comprehensive detection dashboard with system monitoring and controls*
+
 ## 📋 Project Overview
 
 An advanced, low-budget intruder detection system providing real-time human and animal detection with intelligent face recognition capabilities for Windows 11.
@@ -149,11 +157,26 @@ python main.py
 - **System Status**: Connection status, performance metrics, active detections
 - **Quick Controls**: Manual photo capture, detection toggles, emergency alerts
 
+![Real-time Detection](Images/Real_time.jpg)
+*Real-time detection interface showing live camera feed with detection overlays*
+
+![Detection Page](Images/Detection_page.jpg)
+*Main detection dashboard with system controls and status monitoring*
+
 ### **IP Camera Manager**
 - **Camera Configuration**: Protocol, IP address, port, URL suffix settings
 - **Connection Testing**: Real-time connectivity verification
 - **Status Management**: Enable/disable cameras, view connection history
 - **Fallback Settings**: Local camera configuration when network fails
+
+![IP Camera View](Images/IP_View_camera.jpg)
+*IP Camera management interface showing connected cameras*
+
+![IP Camera Add](Images/IP_Add_camera.jpg)
+*Adding new IP camera with configuration settings*
+
+![IP Camera Test](Images/IP_Test_camera.jpg)
+*Testing IP camera connectivity and configuration*
 
 ### **Entity Management**
 - **Human Registration**: Face image upload, name assignment, ID management
@@ -161,11 +184,32 @@ python main.py
 - **Bulk Operations**: Import/export entity data, batch processing
 - **Image Validation**: Face detection verification, image quality checks
 
+![Human Management](Images/Human_page.jpg)
+*Human entity management interface for face registration and ID assignment*
+
+![Animal Management](Images/Aminal_page.jpg)
+*Animal entity management for pet registration and classification*
+
+![Bulk Operations](Images/Bulk_Operation.jpg)
+*Bulk operations interface for batch processing of entities*
+
 ### **Notification Center**
 - **Telegram User Management**: Chat ID registration, username tracking
 - **Permission Settings**: Individual notification preferences per user
 - **Bot Configuration**: Token management, command setup, help system
 - **Test Functionality**: Send test messages, verify bot connectivity
+
+![Bot Configuration](Images/Bot_Config.jpg)
+*Telegram bot configuration interface with token management*
+
+![Notification Users](Images/Notification_User.jpg)
+*User management for Telegram notifications with permission settings*
+
+![Notification Test 1](Images/Notification_test.jpg)
+*Testing notification functionality - sending test messages*
+
+![Notification Test 2](Images/Notification_test2.jpg)
+*Notification test results and bot connectivity verification*
 
 ### **Performance Monitor**
 - **Real-time Metrics**: FPS, processing times, resource utilization
