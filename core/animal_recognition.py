@@ -7,7 +7,6 @@ using face_recognition + YOLO + color identification as preferred by the user.
 
 import cv2
 import numpy as np
-import face_recognition
 import time
 from typing import Dict, List, Tuple, Optional
 import logging
@@ -17,6 +16,27 @@ import os
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# `face_recognition` is an optional backend (requirements-optional.txt): it
+# builds dlib from source, and its own last release was February 2020. This
+# import was the only unguarded one in the package — `core/face_recognition.py`
+# has degraded to OpenCV without it since the start, while importing this module
+# simply failed, taking `core/__init__.py` and three test modules down with it.
+#
+# Nothing here needs it to be present. Pet identification is a hybrid score —
+# 70% face, 30% colour — and the scorer already skips the face component when
+# there are no face results, so an install without dlib identifies pets by
+# colour instead of not starting.
+try:
+    import face_recognition
+
+    FACE_RECOGNITION_AVAILABLE = True
+except ImportError:
+    FACE_RECOGNITION_AVAILABLE = False
+    logger.warning(
+        "face_recognition not installed; pets will be identified by colour only. "
+        "Install it with: pip install -r requirements-optional.txt"
+    )
 
 
 class AnimalRecognitionSystem:
@@ -133,7 +153,11 @@ class AnimalRecognitionSystem:
     def _compute_pet_encodings(self, pet_info: Dict):
         """Compute face encodings for a pet from its images."""
         encodings = []
-        
+
+        if not FACE_RECOGNITION_AVAILABLE:
+            pet_info['face_encodings'] = encodings
+            return
+
         for image_path in pet_info['image_paths']:
             try:
                 if os.path.exists(image_path):
@@ -282,6 +306,9 @@ class AnimalRecognitionSystem:
     
     def _recognize_pet_face(self, animal_image: np.ndarray, animal_class: int) -> Optional[Dict]:
         """Use face_recognition library for pet face identification."""
+        if not FACE_RECOGNITION_AVAILABLE:
+            return None
+
         try:
             # face_recognition works surprisingly well on animal faces
             face_encodings = face_recognition.face_encodings(animal_image)

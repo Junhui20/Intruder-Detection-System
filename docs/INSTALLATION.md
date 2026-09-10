@@ -247,7 +247,7 @@ print('✅ All core systems can be imported')
 # 4. Install face-recognition: pip install face-recognition
 
 # Solution 2: Skip face recognition temporarily
-pip install ultralytics torch torchvision opencv-python numpy requests psutil PyYAML python-dotenv GPUtil
+pip install -r requirements.txt
 python main.py  # Run without face recognition
 ```
 
@@ -384,7 +384,7 @@ pip install PyYAML>=6.0
 pip install python-dotenv>=1.0.0
 
 # Optional GPU monitoring
-pip install GPUtil>=1.4.0
+pip install "nvidia-ml-py>=12.535,<13"
 
 # Test installation
 python scripts/check_dependencies.py

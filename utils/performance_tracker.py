@@ -12,11 +12,9 @@ from collections import deque
 from datetime import datetime
 import logging
 
-try:
-    import GPUtil
-    GPU_AVAILABLE = True
-except ImportError:
-    GPU_AVAILABLE = False
+from .gpu_probe import gpu_available, gpu_load_percent, gpu_memory_percent
+
+GPU_AVAILABLE = gpu_available()
 
 logger = logging.getLogger(__name__)
 
@@ -379,14 +377,14 @@ class ResourceMonitor:
             
             # GPU usage (if available)
             if GPU_AVAILABLE:
-                try:
-                    gpus = GPUtil.getGPUs()
-                    if gpus:
-                        gpu = gpus[0]  # Use first GPU
-                        self.gpu_usage = gpu.load * 100
-                        self.gpu_memory = gpu.memoryUtil * 100
-                except Exception:
-                    pass  # GPU monitoring failed
+                # Already whole percent — GPUtil's 0-1 load/memoryUtil and the
+                # `* 100` that went with them are gone.
+                load = gpu_load_percent()
+                memory = gpu_memory_percent()
+                if load is not None:
+                    self.gpu_usage = load
+                if memory is not None:
+                    self.gpu_memory = memory
                     
         except Exception as e:
             logger.error(f"Error updating resource metrics: {e}")
