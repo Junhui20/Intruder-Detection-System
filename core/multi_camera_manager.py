@@ -93,14 +93,9 @@ class ResourceMonitor:
             memory_percent = memory.percent
 
             # GPU monitoring (if available)
-            gpu_percent = 0.0
-            try:
-                import GPUtil
-                gpus = GPUtil.getGPUs()
-                if gpus:
-                    gpu_percent = gpus[0].load * 100
-            except ImportError:
-                pass
+            from utils.gpu_probe import gpu_load_percent
+
+            gpu_percent = gpu_load_percent() or 0.0
 
             return {
                 'cpu': cpu_percent,

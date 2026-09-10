@@ -17,8 +17,8 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from core.detection_engine import DetectionEngine
-from core.face_recognition_system import FaceRecognitionSystem
-from core.animal_recognition_system import AnimalRecognitionSystem
+from core.face_recognition import FaceRecognitionSystem
+from core.animal_recognition import AnimalRecognitionSystem
 from config.detection_config import DetectionConfig
 
 class TestDetectionEngine(unittest.TestCase):

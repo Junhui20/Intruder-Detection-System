@@ -1,0 +1,19 @@
+# Optional recognition backends.
+#
+# `core/face_recognition.py` picks the best backend available at import time and
+# already falls back to OpenCV DNN+LBPH when neither of these is installed, so
+# the system runs without them — with less accurate face matching.
+#
+# They are not in requirements.txt because both are painful installs that would
+# otherwise block every fresh clone:
+#
+#   face-recognition  builds dlib from source. Needs cmake and a C++ toolchain,
+#                     and its own last release was February 2020, so it lags
+#                     new Python versions by a long way.
+#   mediapipe         was imported by core/face_recognition.py all along but
+#                     never declared anywhere. Declared here now.
+#
+#   pip install -r requirements-optional.txt
+
+face-recognition>=1.3.0,<2
+mediapipe>=0.10.14,<1

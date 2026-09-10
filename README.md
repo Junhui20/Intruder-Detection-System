@@ -259,11 +259,21 @@ CREATE TABLE notification_settings (
 ## 🔧 Development
 
 ### Prerequisites
-- Python 3.9+ (3.11 recommended)
-- NVIDIA GPU with CUDA support
-- Visual Studio Build Tools (Windows)
+- Python 3.12+ — verified on 3.12 and 3.14 (2026-09-11)
+- NVIDIA GPU with CUDA support (optional; the system runs on CPU)
 - Git
 - SQLite 3.x
+
+Visual Studio Build Tools are no longer needed for a normal install. They were
+required by `face-recognition`, which builds dlib from source; that is now an
+optional backend in `requirements-optional.txt`, and face matching falls back
+to OpenCV without it.
+
+```bash
+pip install -r requirements.txt              # runtime
+pip install -r requirements-optional.txt     # dlib face encodings, MediaPipe
+pip install -r requirements-dev.txt          # tests and linting
+```
 
 ### Development Setup
 ```bash
