@@ -21,6 +21,23 @@ from core.face_recognition import FaceRecognitionSystem
 from core.animal_recognition import AnimalRecognitionSystem
 from config.detection_config import DetectionConfig
 
+
+def engine_from(config):
+    """Builds a DetectionEngine the way main.py does.
+
+    These tests used to call `DetectionEngine(config)`, passing the config as
+    the first positional argument — which is `model_path: str`. YOLO() was then
+    handed a DetectionConfig repr as a filename, the engine logged "Failed to
+    load YOLO model" and carried on with `model = None`, and every test in the
+    class errored in setUpClass.
+    """
+    return DetectionEngine(
+        model_path=config.yolo_model_path,
+        confidence=config.yolo_confidence,
+        use_optimized_engine=config.use_optimized_engine,
+        optimized_model_dir=config.optimized_model_dir,
+    )
+
 class TestDetectionEngine(unittest.TestCase):
     """Test cases for the detection engine."""
     
@@ -28,7 +45,7 @@ class TestDetectionEngine(unittest.TestCase):
     def setUpClass(cls):
         """Set up test fixtures."""
         cls.config = DetectionConfig()
-        cls.detection_engine = DetectionEngine(cls.config)
+        cls.detection_engine = engine_from(cls.config)
         
         # Create test image
         cls.test_image = np.zeros((480, 640, 3), dtype=np.uint8)
@@ -249,7 +266,7 @@ class TestDetectionAccuracy(unittest.TestCase):
     def setUpClass(cls):
         """Set up test fixtures."""
         cls.config = DetectionConfig()
-        cls.detection_engine = DetectionEngine(cls.config)
+        cls.detection_engine = engine_from(cls.config)
     
     def test_detection_consistency(self):
         """Test detection consistency across multiple runs."""

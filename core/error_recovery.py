@@ -329,7 +329,18 @@ class ErrorRecoveryManager:
                 from config.detection_config import DetectionConfig
                 
                 config = DetectionConfig()
-                self.main_system.detection_engine = DetectionEngine(config)
+                # Keyword arguments, matching main.py. This used to pass the
+                # config as the first positional argument, which is
+                # `model_path: str` — so YOLO() was handed a DetectionConfig
+                # repr as a filename. The engine swallows that failure
+                # internally and this method returned True, so recovery
+                # reported success and left a detection engine with no model.
+                self.main_system.detection_engine = DetectionEngine(
+                    model_path=config.yolo_model_path,
+                    confidence=config.yolo_confidence,
+                    use_optimized_engine=config.use_optimized_engine,
+                    optimized_model_dir=config.optimized_model_dir,
+                )
                 return True
             
             return False
