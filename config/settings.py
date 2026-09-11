@@ -112,12 +112,21 @@ class Settings:
                 with open(config_path, 'r') as f:
                     config_data = yaml.safe_load(f) or {}
 
-                # Apply config file values
+                # Apply config file values.
+                #
+                # A nested key is tried as both `key` and `section_key`: the
+                # YAML nests as `database: path:` while the attribute is
+                # `database_path`, so leaf-name matching alone silently
+                # dropped it and every custom database path in config.yaml was
+                # ignored in favour of the default. Leaf name first, so
+                # existing files that already match directly are unaffected.
                 for section, values in config_data.items():
                     if isinstance(values, dict):
                         for key, value in values.items():
-                            if hasattr(settings, key):
-                                setattr(settings, key, value)
+                            for attr in (key, f"{section}_{key}"):
+                                if hasattr(settings, attr):
+                                    setattr(settings, attr, value)
+                                    break
                     else:
                         if hasattr(settings, section):
                             setattr(settings, section, values)
