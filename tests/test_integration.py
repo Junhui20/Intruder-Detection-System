@@ -28,6 +28,23 @@ from config.settings import Settings
 from config.detection_config import DetectionConfig
 
 
+def engine_from(config):
+    """Builds a DetectionEngine the way main.py does.
+
+    These tests used to call `DetectionEngine(config)`, passing the config as
+    the first positional argument — which is `model_path: str`. YOLO() was then
+    handed a DetectionConfig repr as a filename, the engine logged "Failed to
+    load YOLO model" and carried on with `model = None`, and every test in the
+    class errored in setUpClass.
+    """
+    return DetectionEngine(
+        model_path=config.yolo_model_path,
+        confidence=config.yolo_confidence,
+        use_optimized_engine=config.use_optimized_engine,
+        optimized_model_dir=config.optimized_model_dir,
+    )
+
+
 class IntegrationTestCase(unittest.TestCase):
     """Base class for integration tests."""
     
@@ -107,7 +124,7 @@ class TestDetectionPipeline(IntegrationTestCase):
     
     def setUp(self):
         """Set up detection components."""
-        self.detection_engine = DetectionEngine(self.detection_config)
+        self.detection_engine = engine_from(self.detection_config)
         self.face_recognition = FaceRecognitionSystem()
         self.animal_recognition = AnimalRecognitionSystem()
     

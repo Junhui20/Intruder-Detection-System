@@ -135,8 +135,15 @@ class Settings:
     def _load_from_environment(self):
         """Load settings from environment variables with proper type conversion."""
         # Secure settings (prioritize environment variables)
+        # NO `or self.bot_token` fallback. This method's own docstring says
+        # sensitive data comes from the environment, but the config-file loop
+        # above has already setattr'd every matching key onto `settings` — so
+        # the fallback meant a token committed in config.yaml was picked up
+        # and used, silently, exactly as if it had been supplied securely.
+        # An unset environment variable now leaves the token empty, which is a
+        # visible failure instead of an invisible one.
         self.bot_token = get_secure_config("telegram.bot_token", env_var="TELEGRAM_BOT_TOKEN",
-                                         config_path="telegram.bot_token", required=False) or self.bot_token
+                                         config_path="telegram.bot_token", required=False) or ""
 
         # Performance settings
         self.max_cpu_usage = get_config("max_cpu_usage", self.max_cpu_usage,
