@@ -205,77 +205,23 @@ Last Detection: 2 minutes ago
 
 ## 🎮 Bot Commands
 
-### User Commands
+Only chat ids on the Telegram page are answered; anyone else is ignored.
 
-**`/start`** - Register for notifications
+| Command | What happens |
+|---|---|
+| `/status` | detecting or stopped, cameras, tier, how many people and pets are enrolled, armed / disarmed / muted, time of the last alert |
+| `/snapshot` | the current annotated camera frame as a photo |
+| `/arm` | alerts on |
+| `/disarm` | alerts off until `/arm` — detection keeps running, the live view keeps working |
+| `/mute 1h` | alerts off for a while: `30m`, `2h`, `1h30m`, or plain minutes |
+| `/enroll Name` | **reply to one of the bot's alert photos** with this. That person or pet becomes family: the photo is saved (pets are cropped to their box), the roster reloads, the next time they appear the alert names them. Add more photos on the web UI for better matching |
+| anything else | the command list |
+
 ```
-Welcome to Intruder Detection System! 🛡️
-
-You are now registered to receive detection alerts.
-
-Available commands:
-/check - System status
-/status - Detection statistics
-/help - Show this help
-/stop - Unregister from alerts
+🟢 detecting · 1 camera(s) · tier low
+2 people, 1 pets enrolled
+🟢 armed · last alert 14:32
 ```
-
-**`/check`** - Get current system status
-```
-📊 SYSTEM STATUS
-
-🟢 Online | 🎯 Detecting | 📹 2 Cameras Active
-⚡ Performance: 58.8 FPS | 🧠 TensorRT Optimized
-📊 Today: 15 humans, 8 animals detected
-```
-
-**`/status`** - Show detection statistics
-```
-📈 DETECTION STATISTICS (Last 24h)
-
-👤 Humans: 15 detections
-   • Jun Hui: 8 times
-   • Jia Qing: 3 times  
-   • Unknown: 4 times
-
-🐾 Animals: 8 detections
-   • Jacky (Dog): 5 times
-   • Unknown Cat: 2 times
-   • Unknown Dog: 1 time
-
-📊 Performance: Avg 58.2 FPS
-```
-
-**`/help`** - Show available commands
-```
-🤖 AVAILABLE COMMANDS
-
-/check - Current system status
-/status - Detection statistics
-/help - Show this help message
-/start - Start receiving notifications
-/stop - Stop receiving notifications
-
-📱 You will receive automatic alerts for:
-• Human detections with photos
-• Animal detections with photos  
-• System status updates
-```
-
-**`/stop`** - Stop receiving notifications
-```
-❌ Notifications Disabled
-
-You will no longer receive detection alerts.
-Send /start to re-enable notifications.
-```
-
-### Admin Commands (Future Enhancement)
-
-**`/admin`** - Admin panel access
-**`/users`** - List all registered users
-**`/broadcast`** - Send message to all users
-**`/settings`** - Modify system settings
 
 ## 🔧 Advanced Configuration
 
