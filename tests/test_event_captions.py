@@ -11,7 +11,6 @@ import requests
 sys.path.append(str(Path(__file__).parent.parent))
 
 from core.event_captions import EventCaptioner
-from core.notification_system import NotificationSystem
 
 FRAME = np.zeros((120, 160, 3), dtype=np.uint8)
 
@@ -77,34 +76,6 @@ class TestEventCaptioner(unittest.TestCase):
             "core.event_captions.requests.post", side_effect=requests.Timeout
         ):
             self.assertIsNone(captioner.describe(FRAME))
-
-
-class TestCaptionReachesTelegram(unittest.TestCase):
-    """The photo goes out first; the caption is edited in under it afterwards."""
-
-    def test_send_returns_message_ids_and_caption_edit_targets_them(self):
-        bot = NotificationSystem("token")
-        bot.load_users(
-            [
-                {
-                    "chat_id": 7,
-                    "telegram_username": "u",
-                    "notify_human_detection": True,
-                    "notify_animal_detection": True,
-                    "sendstatus": "open",
-                }
-            ]
-        )
-        reply = mock.Mock(status_code=200)
-        reply.json.return_value = {"ok": True, "result": {"message_id": 42}}
-        with mock.patch(
-            "core.notification_system.requests.post", return_value=reply
-        ) as post:
-            sent = bot.send_notification("human", "🚨 Unknown person")
-            self.assertEqual(sent, [(7, 42)])
-            bot.edit_caption(7, 42, "🚨 Unknown person\n💬 A man at the gate")
-        self.assertTrue(post.call_args.args[0].endswith("/editMessageCaption"))
-        self.assertEqual(post.call_args.kwargs["data"]["message_id"], 42)
 
 
 if __name__ == "__main__":

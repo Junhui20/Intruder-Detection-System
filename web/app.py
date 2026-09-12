@@ -152,37 +152,13 @@ def create_app(system, password: str) -> FastAPI:
             path = ENROL[kind] / f"{slug}_{int(time.time())}_{i}.jpg"
             path.write_bytes(photo.file.read())
             paths.append(str(path))
-        db.create_whitelist_entry(
-            WhitelistEntry(
-                name=name.strip(),
-                entity_type=kind,
-                image_path=paths[0],
-                multiple_photos=json.dumps(paths[1:]) if len(paths) > 1 else None,
-                coco_class_id=class_id if kind == "animal" else None,
-                individual_id=slug if kind == "animal" else None,
-            )
-        )
-        reload_roster(kind)
+        system.enrol(kind, name.strip(), paths, class_id)
         return RedirectResponse("/people" if kind == "human" else "/pets", 303)
 
     @app.delete("/enrol/{kind}/{entry_id}")
     def unenrol(kind: str, entry_id: int):
-        entry = db.get_whitelist_entry(entry_id)
-        if entry:
-            for path in [entry.image_path] + (
-                json.loads(entry.multiple_photos) if entry.multiple_photos else []
-            ):
-                Path(path).unlink(missing_ok=True)
-            db.delete_whitelist_entry(entry_id)
-            reload_roster(entry.entity_type)
+        system.forget(entry_id)
         return HTMLResponse("")  # htmx swaps the row away
-
-    def reload_roster(kind: str) -> None:
-        rows = [e.to_dict() for e in db.get_whitelist_entries(entity_type=kind)]
-        if kind == "human" and system.face_recognition:
-            system.face_recognition.load_known_faces(rows)
-        if kind == "animal" and system.animal_recognition:
-            system.animal_recognition.load_known_pets(rows)
 
     @app.get("/cameras")
     def cameras(request: Request):
