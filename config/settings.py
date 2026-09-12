@@ -28,6 +28,9 @@ class Settings:
     # Model-size preset; per-feature overrides win over it
     tier: str = "low"  # low or high
     face_model: str = ""  # InsightFace pack; empty = TIER_MODELS[tier]
+    captions_enabled: bool = True  # one-line VLM description on each alert photo
+    captions_model: str = ""  # Ollama model; empty = qwen2.5vl:3b (low) / qwen2.5vl:7b (high)
+    ollama_host: str = "http://localhost:11434"
 
     # Detection settings (user configurable)
     yolo_model: str = "yolo11n.pt"

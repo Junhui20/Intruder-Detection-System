@@ -42,7 +42,8 @@ from config.detection_config import DetectionConfig
 from config.camera_config import CameraConfigManager
 from database.database_manager import DatabaseManager
 from core.detection_engine import DetectionEngine
-from core.face_recognition import TIER_MODELS, FaceRecognitionSystem
+from core.event_captions import TIER_MODELS as CAPTION_MODELS, EventCaptioner
+from core.face_recognition import TIER_MODELS as FACE_MODELS, FaceRecognitionSystem
 from core.animal_recognition import AnimalRecognitionSystem
 from core.camera_manager import CameraManager
 from core.notification_system import NotificationSystem
@@ -97,6 +98,7 @@ class IntruderDetectionSystem:
         self.detection_engine: Optional[DetectionEngine] = None
         self.face_recognition: Optional[FaceRecognitionSystem] = None
         self.animal_recognition: Optional[AnimalRecognitionSystem] = None
+        self.captioner: Optional[EventCaptioner] = None
         self.notification_system: Optional[NotificationSystem] = None
         self.performance_tracker: Optional[PerformanceTracker] = None
         self.gui: Optional[MainWindow] = None
@@ -240,7 +242,7 @@ class IntruderDetectionSystem:
             self.face_recognition = FaceRecognitionSystem(
                 confidence_threshold=self.detection_config.human_confidence_threshold,
                 max_faces_per_frame=self.detection_config.max_faces_per_frame,
-                model=self.settings.face_model or TIER_MODELS[self.settings.tier],
+                model=self.settings.face_model or FACE_MODELS[self.settings.tier],
                 use_gpu=self.settings.enable_gpu,
             )
             
@@ -308,6 +310,14 @@ class IntruderDetectionSystem:
                 return True
 
             self.notification_system = NotificationSystem(bot_token, self.db_manager)
+            if self.settings.captions_enabled:
+                try:  # a caption problem must never cost the alert channel
+                    self.captioner = EventCaptioner(
+                        self.settings.captions_model or CAPTION_MODELS[self.settings.tier],
+                        self.settings.ollama_host,
+                    )
+                except Exception as e:
+                    logger.warning(f"Event captions off: {e}")
             
             # Load users from database
             users = self.db_manager.get_all_notification_settings(status="open")
@@ -640,15 +650,10 @@ class IntruderDetectionSystem:
                     )
 
                     if is_unknown:
-                        # Unknown person detected - capture screenshot
-                        photo_path = self._capture_detection_screenshot(frame, 'unknown_human', confidence)
-                        logger.info(f"📸 Screenshot captured for unknown person: {photo_path}")
-
-                        if self.notification_system:
-                            message = f"🚨 Unknown person detected (confidence: {confidence:.1f}%)"
-                            self.notification_system.send_notification('human', message, photo_path=photo_path)
-                            notification_sent = True
-                            logger.info(f"📱 Telegram notification sent with photo")
+                        photo_path, notification_sent = self._alert(
+                            'human', f"🚨 Unknown person detected (confidence: {confidence:.1f}%)",
+                            frame, 'unknown_human', confidence, 'person',
+                        )
 
                     # Log detection to database
                     if self.db_manager:
@@ -749,15 +754,10 @@ class IntruderDetectionSystem:
                         )
 
                         if is_unknown_animal:
-                            # Unknown animal detected - capture screenshot
-                            photo_path = self._capture_detection_screenshot(frame, f'unknown_{animal_type}', confidence)
-                            logger.info(f"📸 Screenshot captured for unknown {animal_type}: {photo_path}")
-
-                            if self.notification_system:
-                                message = f"🐾 Unknown {animal_type} detected (confidence: {confidence:.1f}%)"
-                                self.notification_system.send_notification('animal', message, photo_path=photo_path)
-                                notification_sent = True
-                                logger.info(f"📱 Telegram notification sent with photo")
+                            photo_path, notification_sent = self._alert(
+                                'animal', f"🐾 Unknown {animal_type} detected (confidence: {confidence:.1f}%)",
+                                frame, f'unknown_{animal_type}', confidence, animal_type,
+                            )
 
                         # Log detection to database
                         if self.db_manager:
@@ -823,6 +823,37 @@ class IntruderDetectionSystem:
 
         except Exception as e:
             logger.debug(f"Error cleaning up old sessions: {e}")
+
+    def _alert(self, kind: str, message: str, frame, label: str, confidence: float, subject: str):
+        """
+        Save the frame and notify Telegram; the VLM's one-liner is added under
+        the photo once it is ready.
+
+        Sending and captioning run on a thread so the detection loop is not
+        held up. The photo goes out first — a caption takes 1 s on a GPU and
+        10+ s on a CPU, and an intruder alert should not wait for it.
+
+        Returns:
+            (photo_path, whether a notification was queued)
+        """
+        photo_path = self._capture_detection_screenshot(frame, label, confidence)
+        if not self.notification_system:
+            return photo_path, False
+        snapshot = frame.copy()
+
+        def send():
+            try:
+                sent = self.notification_system.send_notification(kind, message, photo_path=photo_path)
+                if not (sent and photo_path and self.captioner):
+                    return
+                caption = self.captioner.describe(snapshot, subject)
+                for chat_id, message_id in sent if caption else []:
+                    self.notification_system.edit_caption(chat_id, message_id, f"{message}\n💬 {caption}")
+            except Exception:
+                logger.exception("Alert delivery failed")
+
+        threading.Thread(target=send, daemon=True).start()
+        return photo_path, True
 
     def _capture_detection_screenshot(self, frame, detection_type: str, confidence: float) -> str:
         """
