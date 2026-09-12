@@ -1,3 +1,5 @@
+[![tests](https://github.com/Junhui20/Intruder-Detection-System/actions/workflows/tests.yml/badge.svg)](https://github.com/Junhui20/Intruder-Detection-System/actions/workflows/tests.yml)
+
 # Everything Ring, Arlo and Google charge $100–200 a year for — familiar faces, AI event captions — running on your own hardware, zero subscription. Plus one thing they don't sell: recognising *your own* pet.
 
 A local intruder-detection system for the home. A camera (an IP camera, an
@@ -99,7 +101,7 @@ Optional extras: `requirements-optional.txt` (MediaPipe, dlib for the legacy pet
 `requirements-dev.txt` (pytest, black, flake8). GPU users: `python
 scripts/install.py --gpu` installs the CUDA build of PyTorch.
 
-Python 3.12 and 3.14 are verified. **Linux and Windows** are supported; macOS is
+**Linux and Windows** on Python 3.12 and 3.14 are what CI tests; macOS is
 untested.
 
 ## Security
@@ -126,9 +128,11 @@ untested.
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest tests/ -q      # ~30 s; external-dependency tests are skipped when the dependency is absent
-black . && flake8
+python -m pytest tests/ -q      # ~30 s; needs internet once for the InsightFace pack
+flake8                          # .flake8 ignores the v1 codebase's cosmetic noise; keep new lines clean
 ```
+
+CI runs the same on Ubuntu and Windows × Python 3.12 and 3.14.
 
 Conventions are in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): PEP 8 at 88
 columns, absolute imports, Google-style docstrings, type hints on public
@@ -139,7 +143,7 @@ methods.
 | | Ticket | Status |
 |---|---|---|
 | T1 | Cleanup + this README skeleton | done |
-| T2 | CI matrix: Ubuntu × Windows × Python 3.12/3.14 | |
+| T2 | CI matrix: Ubuntu × Windows × Python 3.12/3.14 | done |
 | T3 | RTSP first-class | done |
 | T4 | InsightFace face backend (replaces LBPH) | done |
 | T5 | Ollama event captions + setup script | done |
