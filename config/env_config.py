@@ -143,19 +143,22 @@ class EnvironmentConfigManager:
             logger.info(f"Using secure value from environment variable {env_key}")
             return env_value
         
-        # Check config file but warn about security
+        # A secret found in the config file is reported and NOT used. This
+        # used to warn and then return it anyway, so a token committed to
+        # config.yaml worked exactly as if it had been supplied securely.
         config_key = config_path or key
-        config_value = self._get_nested_config(config_key)
-        
-        if config_value:
-            logger.warning(f"⚠️ SECURITY WARNING: Sensitive data '{config_key}' found in config file. "
-                          f"Consider using environment variable {env_key} instead.")
-            return str(config_value)
-        
+        if self._get_nested_config(config_key):
+            logger.warning(
+                f"SECURITY WARNING: '{config_key}' is set in the config file and "
+                f"will be ignored. Set the environment variable {env_key} instead."
+            )
+
         if required:
-            logger.error(f"Required secure configuration '{key}' not found in environment or config file")
-            return None
-        
+            logger.error(
+                f"Required secure configuration '{key}' not set in "
+                f"environment variable {env_key}"
+            )
+
         return None
     
     def _get_nested_config(self, key_path: str) -> Any:

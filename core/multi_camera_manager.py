@@ -682,11 +682,7 @@ class MultiCameraManager:
             active_cameras = 0
 
             for camera_id, stats in self.performance_stats['camera_stats'].items():
-                # `.get`, not `[...]`: the two dicts are not kept in lockstep.
-                # A camera removed at runtime leaves its stats behind for one
-                # more pass, and indexing camera_status then raised KeyError
-                # out of the performance monitor — a crash in the thread that
-                # is supposed to be watching for trouble.
+                # camera_stats can outlive camera_status by a pass after removal
                 if self.camera_status.get(camera_id) == CameraStatus.ACTIVE:
                     total_fps += stats.get('average_fps', 0)
                     active_cameras += 1

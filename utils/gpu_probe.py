@@ -1,19 +1,14 @@
 """
 GPU Telemetry Probe
 
-Reads GPU load and temperature through NVIDIA's own NVML bindings
-(``nvidia-ml-py``), replacing GPUtil — whose last release was December 2018
-and which shelled out to ``nvidia-smi`` to parse its text output.
-
-Three call sites used to import GPUtil independently, each inside its own
-try/except, and each with a slightly different idea of what to do when there
-was no GPU. They share this module now, so "no NVIDIA GPU", "driver not
-loaded" and "library not installed" are one answer in one place: ``None``.
-
-Every function here is safe to call on a machine with no GPU at all.
+Reads GPU load, memory and temperature through NVIDIA's NVML bindings
+(``nvidia-ml-py``). Every function returns ``None`` on a machine with no
+NVIDIA GPU, no driver, or no bindings installed, so callers never need to
+guard the import themselves.
 """
 
 import logging
+from functools import lru_cache
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -26,29 +21,24 @@ except ImportError:
     _NVML_IMPORTED = False
     logger.debug("nvidia-ml-py not installed; GPU telemetry unavailable")
 
-# NVML has to be initialised once per process, and it fails on machines with no
-# NVIDIA driver — which is not an error worth logging on every sample.
-_nvml_ready: Optional[bool] = None
+
+@lru_cache(maxsize=1)
+def _nvml_ready() -> bool:
+    """Initialise NVML once per process; False when there is no driver."""
+    if not _NVML_IMPORTED:
+        return False
+    try:
+        pynvml.nvmlInit()
+        return True
+    except Exception as e:
+        logger.debug(f"NVML unavailable: {e}")
+        return False
 
 
 def _handle(index: int = 0):
-    """Returns an NVML device handle, or None when there is nothing to read."""
-    global _nvml_ready
-
-    if not _NVML_IMPORTED:
+    """Return the NVML handle for GPU ``index``, or None."""
+    if not _nvml_ready():
         return None
-
-    if _nvml_ready is None:
-        try:
-            pynvml.nvmlInit()
-            _nvml_ready = True
-        except Exception as e:
-            _nvml_ready = False
-            logger.debug(f"NVML unavailable: {e}")
-
-    if not _nvml_ready:
-        return None
-
     try:
         if pynvml.nvmlDeviceGetCount() <= index:
             return None
@@ -59,11 +49,14 @@ def _handle(index: int = 0):
 
 
 def gpu_load_percent(index: int = 0) -> Optional[float]:
-    """GPU utilisation as 0-100, or None when it cannot be read.
+    """
+    Read GPU utilisation.
 
-    GPUtil reported this as a 0-1 ``load`` that every call site multiplied by
-    100. NVML reports whole percent directly, so the multiplication is gone —
-    check the call sites if you are porting more of them.
+    Args:
+        index: GPU index, 0 for the first device
+
+    Returns:
+        Utilisation as 0-100, or None when it cannot be read
     """
     handle = _handle(index)
     if handle is None:
@@ -75,25 +68,15 @@ def gpu_load_percent(index: int = 0) -> Optional[float]:
         return None
 
 
-def gpu_temperature_c(index: int = 0) -> Optional[float]:
-    """GPU core temperature in Celsius, or None when it cannot be read."""
-    handle = _handle(index)
-    if handle is None:
-        return None
-    try:
-        return float(
-            pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
-        )
-    except Exception as e:
-        logger.debug(f"Could not read GPU temperature: {e}")
-        return None
-
-
 def gpu_memory_percent(index: int = 0) -> Optional[float]:
-    """GPU memory in use as 0-100, or None when it cannot be read.
+    """
+    Read GPU memory in use.
 
-    GPUtil's ``memoryUtil`` was a 0-1 fraction; this is whole percent, for the
-    same reason [gpu_load_percent] is.
+    Args:
+        index: GPU index, 0 for the first device
+
+    Returns:
+        Memory in use as 0-100, or None when it cannot be read
     """
     handle = _handle(index)
     if handle is None:
@@ -108,6 +91,32 @@ def gpu_memory_percent(index: int = 0) -> Optional[float]:
         return None
 
 
+def gpu_temperature_c(index: int = 0) -> Optional[float]:
+    """
+    Read GPU core temperature.
+
+    Args:
+        index: GPU index, 0 for the first device
+
+    Returns:
+        Temperature in Celsius, or None when it cannot be read
+    """
+    handle = _handle(index)
+    if handle is None:
+        return None
+    try:
+        temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+        return float(temp)
+    except Exception as e:
+        logger.debug(f"Could not read GPU temperature: {e}")
+        return None
+
+
 def gpu_available() -> bool:
-    """Whether GPU telemetry can be read at all."""
+    """
+    Whether GPU telemetry can be read at all.
+
+    Returns:
+        True when an NVIDIA GPU with a working driver is present
+    """
     return _handle() is not None

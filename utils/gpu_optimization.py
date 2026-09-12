@@ -218,7 +218,7 @@ class GPUOptimizer:
     
     def _get_gpu_temperature(self) -> Optional[float]:
         """Get GPU temperature if available."""
-        from .gpu_probe import gpu_temperature_c
+        from utils.gpu_probe import gpu_temperature_c
 
         return gpu_temperature_c()
     

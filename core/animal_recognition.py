@@ -17,16 +17,10 @@ import os
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# `face_recognition` is an optional backend (requirements-optional.txt): it
-# builds dlib from source, and its own last release was February 2020. This
-# import was the only unguarded one in the package — `core/face_recognition.py`
-# has degraded to OpenCV without it since the start, while importing this module
-# simply failed, taking `core/__init__.py` and three test modules down with it.
-#
-# Nothing here needs it to be present. Pet identification is a hybrid score —
-# 70% face, 30% colour — and the scorer already skips the face component when
-# there are no face results, so an install without dlib identifies pets by
-# colour instead of not starting.
+# Optional backend (requirements-optional.txt). Without it the module still
+# imports, but individual pet identification cannot succeed: the colour-only
+# score tops out at 0.3 against a 0.49 threshold. A real re-identification
+# backend is planned to replace this.
 try:
     import face_recognition
 
@@ -34,8 +28,7 @@ try:
 except ImportError:
     FACE_RECOGNITION_AVAILABLE = False
     logger.warning(
-        "face_recognition not installed; pets will be identified by colour only. "
-        "Install it with: pip install -r requirements-optional.txt"
+        "face_recognition not installed; individual pet identification is unavailable"
     )
 
 
