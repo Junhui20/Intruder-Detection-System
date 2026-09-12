@@ -29,5 +29,5 @@ jobs:
       # The CPU index keeps Linux from pulling 2.5 GB of CUDA wheels
       - run: pip install -r requirements.txt -r requirements-dev.txt --extra-index-url https://download.pytorch.org/whl/cpu
       - run: flake8
-      - run: black --check bench.py core/animal_recognition.py core/face_recognition.py core/event_captions.py scripts/setup_ollama.py tests/test_camera_config.py tests/test_event_captions.py
+      - run: black --check web/app.py bench.py core/animal_recognition.py core/face_recognition.py core/event_captions.py scripts/setup_ollama.py tests/test_camera_config.py tests/test_event_captions.py
       - run: python -m pytest tests/ -q

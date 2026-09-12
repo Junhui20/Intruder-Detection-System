@@ -50,7 +50,6 @@ python scripts/check_dependencies.py
 ✅ Satisfied Dependencies (8):
    📦 numpy 1.24.3 - Version satisfied
    📦 opencv-python 4.8.1 - Version satisfied
-   📦 tkinter - Built-in module
    📦 sqlite3 - Built-in module
 
 ⚠️ Outdated Dependencies (2):
@@ -316,7 +315,7 @@ python main.py
 ```
 
 ### Initial Configuration
-1. **Camera Setup**: Configure IP cameras in GUI
+1. **Camera Setup**: add cameras on the web UI's Cameras page
 2. **Telegram Bot**: Add bot token in Notification Center
 3. **Entity Registration**: Add known people and pets
 4. **Threshold Tuning**: Adjust confidence levels

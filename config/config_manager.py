@@ -294,12 +294,6 @@ class ConfigManager:
                 rule_type="range",
                 params={"min": 0.1, "max": 1.0},
                 error_message="YOLO confidence must be between 0.1 and 1.0"
-            ),
-            ConfigValidationRule(
-                path="gui.theme",
-                rule_type="choices",
-                params={"choices": ["light", "dark", "auto"]},
-                error_message="Theme must be 'light', 'dark', or 'auto'"
             )
         ]
     
@@ -321,11 +315,7 @@ class ConfigManager:
             'database': {
                 'path': 'detection_system.db'
             },
-            'gui': {
-                'theme': 'dark',
-                'window_size': '1280x720',
-                'auto_refresh_interval': 100
-            },
+            'web': {'host': '0.0.0.0', 'port': 8000},
             'performance': {
                 'enable_gpu': True,
                 'enable_performance_monitoring': True,

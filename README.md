@@ -10,8 +10,8 @@ Nothing leaves your LAN.
 
 > **Status: mid-rework.** The original desktop (tkinter) version is tagged
 > [`v1-tkinter`](../../tree/v1-tkinter). `main` is being evolved in place — one
-> problem per commit — towards the design below. Sections marked *placeholder*
-> are filled in as their work lands; see [Roadmap](#roadmap).
+> problem per commit. Sections marked *placeholder* are filled in as their
+> work lands; see [Roadmap](#roadmap).
 
 ## Two tiers, two proofs
 
@@ -82,8 +82,9 @@ portfolio piece.
 - **Telegram** — alerts with photo, per-user notification settings, bot
   commands *(planned: `/status /snapshot /arm /disarm /mute 1h`, and
   `/enroll <name>` by replying to an alert photo)*.
-- **Web UI** — enrolment, event history, MJPEG live view, camera management,
-  tier switch. *(Planned, FastAPI + htmx, replacing the tkinter desktop app.)*
+- **Web UI** — live view (MJPEG), event history with the alert photos,
+  enrol / forget people and pets, add / test / remove cameras, tier switch.
+  FastAPI + Jinja2 + htmx, no build step, one password, LAN only.
 - **Storage** — SQLite, no server.
 
 ## Pet re-ID
@@ -113,6 +114,12 @@ it was not used, and the alternative model considered (AvitoTech's CLIP) was
 trained on it, which is also why it was evaluated here instead — it scored
 78.8 % at 1 % FAR and was dropped.
 
+## What it looks like
+
+![Live view](docs/img/web-live.png)
+
+![Cameras](docs/img/web-cameras.png)
+
 ## Quick start
 
 ```bash
@@ -122,8 +129,11 @@ python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\act
 pip install -r requirements.txt
 python scripts/setup_secure_config.py   # writes .env with your Telegram token
 python scripts/setup_ollama.py          # optional: installs Ollama + pulls the caption model
-python main.py                          # add --headless to run without the desktop UI
+WEB_UI_PASSWORD=choose-one python main.py   # web UI on http://<this machine>:8000
 ```
+
+Without `WEB_UI_PASSWORD` the web UI does not start; detection and Telegram
+still run. Put the variable in `.env` to make it stick.
 
 `requirements-dev.txt` adds pytest, black and flake8. GPU users: `python
 scripts/install.py --gpu` installs the CUDA build of PyTorch.
@@ -135,8 +145,8 @@ untested.
 
 - Secrets (Telegram token) come from environment variables or `.env`, never
   from `config.yaml`. See [docs/SECURITY.md](docs/SECURITY.md).
-- The web UI *(planned)* will refuse to start without `WEB_UI_PASSWORD` set,
-  and binds to the LAN only.
+- The web UI refuses to start without `WEB_UI_PASSWORD` (HTTP Basic, any
+  username) and binds to the LAN only (`web.host` in `config.yaml`).
 - **Never port-forward this to the internet.** A camera system exposed to the
   open internet is a public webcam with a login prompt. For remote access use
   [Tailscale](https://tailscale.com) (or any WireGuard-style overlay): your
@@ -175,18 +185,10 @@ methods.
 | T4 | InsightFace face backend (replaces LBPH) | done |
 | T5 | Ollama event captions + setup script | done |
 | T6–T7 | Pet re-ID: model choice, enrol → embed → match, eval | done |
-| T8 | Web UI, delete tkinter | |
+| T8 | Web UI, delete tkinter | done |
 | T9 | Telegram commands, `/enroll` from an alert photo | |
 | T10 | `bench.py` + both tiers' numbers | |
 | T11–T12 | MYR prices, final README with screenshots | |
-
-## Current desktop interface
-
-Until the web UI lands the tkinter app is still the interface.
-
-![Real-time detection](Images/Real_time.jpg)
-
-![Entity management](Images/Human_page.jpg)
 
 ## License
 

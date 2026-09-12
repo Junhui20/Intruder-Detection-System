@@ -7,6 +7,7 @@ A match is the cosine similarity between a face's embedding and the enrolled
 ones; on a unit-normalised embedding that is a dot product.
 """
 
+import json
 import logging
 import os
 import time
@@ -62,7 +63,13 @@ class FaceRecognitionSystem:
         if FaceAnalysis is None:
             logger.warning("insightface not installed; face recognition disabled")
             return
-        providers = onnxruntime.get_available_providers()
+        # TensorRT is listed as available whenever onnxruntime-gpu is installed,
+        # then fails to load without the TensorRT libraries; CUDA and CPU are enough.
+        providers = [
+            p
+            for p in onnxruntime.get_available_providers()
+            if p != "TensorrtExecutionProvider"
+        ]
         if not use_gpu:
             providers = ["CPUExecutionProvider"]
         try:
@@ -118,16 +125,27 @@ class FaceRecognitionSystem:
 
     def load_known_faces(self, faces_data: List[Dict]) -> None:
         """
-        Replace the roster with whitelist rows (``name`` + ``image_path``).
+        Replace the roster with whitelist rows (``name``, ``image_path`` and the
+        optional JSON list ``multiple_photos``). Every photo of a person counts.
 
         Args:
-            faces_data: Rows from the whitelist table; a row whose photo has no
-                detectable face is skipped, not fatal.
+            faces_data: Rows from the whitelist table; a photo with no detectable
+                face is skipped, not fatal.
         """
-        self.known_face_names, self.known_face_encodings = [], []
+        names, encodings = [], []
         for row in faces_data:
-            self.add_known_face(row["name"], row["image_path"])
-        logger.info(f"Enrolled {len(self.known_face_names)} face(s)")
+            extra = json.loads(row.get("multiple_photos") or "[]")
+            for path in [row["image_path"], *extra]:
+                image = cv2.imread(path) if self.app and os.path.exists(path) else None
+                embedding = self._embed(image) if image is not None else None
+                if embedding is None:
+                    logger.warning(f"No face found for {row['name']} in {path}")
+                    continue
+                names.append(row["name"])
+                encodings.append(embedding)
+        # one assignment each: the detection thread reads these mid-frame
+        self.known_face_names, self.known_face_encodings = names, encodings
+        logger.info(f"Enrolled {len(set(names))} person(s), {len(names)} photo(s)")
 
     def recognize_faces(
         self, frame: np.ndarray, human_detections: List[Dict]
@@ -150,10 +168,14 @@ class FaceRecognitionSystem:
             for t, v in self.track_identities.items()
             if self.frame_count - v["frame"] <= 30
         }
-        if not human_detections or not self.known_face_encodings:
+        names, encodings = (
+            self.known_face_names,
+            self.known_face_encodings,
+        )  # one snapshot
+        if not human_detections or not encodings:
             return human_detections
         start = time.time()
-        known = np.stack(self.known_face_encodings)
+        known = np.stack(encodings)
         try:
             faces = self.app.get(frame)
         except Exception as e:  # a bad frame must not cost the caller its detections
@@ -172,11 +194,8 @@ class FaceRecognitionSystem:
             if inside:
                 sims = known @ max(inside, key=lambda f: f.det_score).normed_embedding
                 i = int(sims.argmax())
-                if (
-                    sims[i] >= self.confidence_threshold
-                    and self.known_face_names[i] not in taken
-                ):
-                    name, score = self.known_face_names[i], float(sims[i])
+                if sims[i] >= self.confidence_threshold and names[i] not in taken:
+                    name, score = names[i], float(sims[i])
             name, score = self._smooth(det.get("track_id"), name, score)
             if name:
                 taken.add(name)

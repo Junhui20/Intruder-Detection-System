@@ -135,17 +135,20 @@ class AnimalRecognitionSystem:
         Replace the roster with whitelist rows (``name``/``individual_id``,
         ``coco_class_id``, ``image_path``, optional JSON ``multiple_photos``).
         """
-        self.known_pets = {}
+        roster = {}
         for row in pets_data:
             try:
                 extra = json.loads(row.get("multiple_photos") or "[]")
             except ValueError:
                 extra = []  # a bad row loses its extra photos, not the whole roster
-            self.add_known_pet(
-                row.get("individual_id") or row["name"],
-                row["coco_class_id"],
-                [row["image_path"]] + extra,
-            )
+            name = row.get("individual_id") or row["name"]
+            if self.add_known_pet(
+                name, row["coco_class_id"], [row["image_path"]] + extra
+            ):
+                roster[name] = self.known_pets.pop(name)
+        self.known_pets = (
+            roster  # one assignment: the detection thread reads it mid-frame
+        )
         logger.info(f"Enrolled {len(self.known_pets)} pet(s)")
 
     def identify_animals(

@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% block title %}Events{% endblock %}{% block body %}
+<form method="get" class="inline">
+  <select name="type" onchange="this.form.submit()">
+    <option value="" {{ "selected" if not type }}>all</option>
+    <option value="human" {{ "selected" if type == "human" }}>people</option>
+    <option value="animal" {{ "selected" if type == "animal" }}>animals</option>
+  </select>
+  <select name="limit" onchange="this.form.submit()">
+    {% for n in (50, 200, 1000) %}<option value="{{ n }}" {{ "selected" if limit == n }}>last {{ n }}</option>{% endfor %}
+  </select>
+</form>
+<table>
+  <tr><th></th><th>When</th><th>Who</th><th>Confidence</th><th>Alerted</th></tr>
+  {% for r in rows %}
+  <tr>
+    <td>{% if r.image_path %}{% set photo = "/photo/" ~ (r.image_path|basename|urlencode) %}<a href="{{ photo }}"><img class="thumb" src="{{ photo }}" alt=""></a>{% endif %}</td>
+    <td>{{ r.detected_at }}</td>
+    <td>{{ r.entity_name or "Unknown" }} <span class="muted">({{ r.detection_type }})</span></td>
+    <td>{{ "%.0f%%"|format(100 * (r.confidence or 0)) }}</td>
+    <td>{{ "yes" if r.notification_sent else "" }}</td>
+  </tr>
+  {% else %}<tr><td colspan="5" class="muted">Nothing yet.</td></tr>{% endfor %}
+</table>
+{% endblock %}

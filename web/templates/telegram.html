@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% block title %}Telegram{% endblock %}{% block body %}
+<table>
+  <tr><th>Chat ID</th><th>Username</th><th>People</th><th>Animals</th><th></th></tr>
+  {% for r in rows %}
+  <tr>
+    <td>{{ r.chat_id }}</td>
+    <td>{{ r.telegram_username }}</td>
+    <td>{{ "yes" if r.notify_human_detection else "" }}</td>
+    <td>{{ "yes" if r.notify_animal_detection else "" }}</td>
+    <td><button hx-delete="/telegram/{{ r.chat_id }}" hx-target="closest tr" hx-swap="outerHTML" hx-confirm="Stop alerting {{ r.telegram_username }}?">remove</button></td>
+  </tr>
+  {% else %}<tr><td colspan="5" class="muted">Nobody receives alerts yet. Message your bot, then find your chat id with @userinfobot.</td></tr>{% endfor %}
+</table>
+<form class="card" method="post" action="/telegram">
+  <label>Chat ID <input name="chat_id" type="number" required></label>
+  <label>Username <input name="username" placeholder="optional"></label>
+  <label><span><input type="checkbox" name="humans" value="true" checked> alert on people</span></label>
+  <label><span><input type="checkbox" name="animals" value="true" checked> alert on animals</span></label>
+  <button>Add recipient</button>
+</form>
+<p class="muted">The bot token itself comes from <code>TELEGRAM_BOT_TOKEN</code> in <code>.env</code>.</p>
+{% endblock %}

@@ -196,3 +196,9 @@ logs/
 
 # Local planning scratch (handoffs, tickets) — never published
 .scratch/
+
+# ── Personal media ─────────────────────────────────────────────
+# Enrolment photos and alert screenshots are people and pets in your home.
+data/**/*.jpg
+data/**/*.jpeg
+data/**/*.png
