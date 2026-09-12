@@ -1,381 +1,80 @@
-# 📦 Installation Guide - Intruder Detection System
+# Installation
 
-## 🚀 Quick Start (Recommended)
+Linux and Windows on Python 3.12 or 3.14 — that is what CI tests. macOS is
+untested. No compiler is needed for anything in `requirements.txt`.
 
-The system includes smart dependency checking that only installs what you need, saving time and bandwidth.
+## 1. Python packages
 
-### Step 1: Clone the Repository
 ```bash
-git clone https://github.com/yourusername/intruder-detection-system.git
-cd intruder-detection-system
-```
-
-### Step 2: Quick Setup
-Choose your platform:
-
-#### Windows
-```cmd
-setup.bat
-```
-
-#### Linux/Mac
-```bash
-chmod +x setup.sh
-./setup.sh
-```
-
-#### Any Platform
-```bash
-python setup.py
-```
-
-### Step 3: Run the Application
-```bash
-python main.py
-```
-
-## 🔍 Smart Installation Options
-
-### Option A: Check Dependencies First
-See what's already installed vs what's needed:
-```bash
-python scripts/check_dependencies.py
-```
-
-**Example Output:**
-```
-🔍 Dependency Check Report
-==================================================
-
-✅ Satisfied Dependencies (8):
-   📦 numpy 1.24.3 - Version satisfied
-   📦 opencv-python 4.8.1 - Version satisfied
-   📦 sqlite3 - Built-in module
-
-⚠️ Outdated Dependencies (2):
-   📦 torch 1.13.0 -> >=2.0.0 (needs update)
-   📦 torchvision 0.14.0 -> >=0.15.0 (needs update)
-
-❌ Missing Dependencies (3):
-   📦 ultralytics >=8.0.0 - Not installed
-   📦 insightface >=2.0 - Not installed
-   📦 requests >=2.31.0 - Not installed
-
-📊 Summary:
-   Total dependencies: 13
-   ✅ Satisfied: 8
-   ⚠️ Outdated: 2
-   ❌ Missing: 3
-
-💡 Installation Command:
-   pip install ultralytics>=8.0.0 insightface>=2.0 requests>=2.31.0 torch>=2.0.0 torchvision>=0.15.0
-```
-
-### Option B: Smart Installation
-Install only what's missing or outdated:
-```bash
-# Basic smart install
-python scripts/install.py
-
-# With GPU support (auto-detected)
-python scripts/install.py --gpu
-
-# Force reinstall everything
-python scripts/install.py --force
-
-# CPU-only mode
-python scripts/install.py --no-gpu
-```
-
-**Smart Installer Features:**
-- ✅ **Selective Installation**: Only installs missing/outdated packages
-- ✅ **GPU Detection**: Automatically detects CUDA and installs appropriate packages
-- ✅ **Version Checking**: Compares installed vs required versions
-- ✅ **Virtual Environment Detection**: Warns if not in venv
-- ✅ **Installation Verification**: Tests imports after installation
-
-### Option C: Traditional Installation
-If you prefer the traditional approach:
-```bash
+git clone https://github.com/Junhui20/Intruder-Detection-System.git
+cd Intruder-Detection-System
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## 🎮 GPU Support
+On Linux without an NVIDIA GPU, add `--extra-index-url https://download.pytorch.org/whl/cpu`
+to skip 2.5 GB of CUDA wheels. With one, `pip install torch` picks the CUDA
+build on its own; for face recognition on the GPU also
+`pip install onnxruntime-gpu` (its CUDA version must match torch's — check with
+`python -c "import onnxruntime as o; print(o.get_available_providers())"`).
 
-### Automatic GPU Detection
-The smart installer automatically detects GPU support:
+`pip install -r requirements-dev.txt` adds pytest, black, flake8 and the
+FastAPI test client.
+
+## 2. Models
+
+Downloaded on first run, so the first start needs internet:
+
+| What | Where | Size |
+|---|---|---|
+| YOLO11n | in the repo (`models/`) | 5 MB |
+| InsightFace pack, low / high tier | `~/.insightface/models` | 16 MB / 280 MB |
+| DINOv2 small / base | `~/.cache/huggingface` | 88 MB / 346 MB |
+| Caption model (optional) | Ollama, see step 4 | 3.2 GB / 6 GB |
+
+## 3. Secrets
 
 ```bash
-python scripts/install.py
+python scripts/setup_secure_config.py   # writes .env
 ```
 
-**Detection Process:**
-1. Checks for `nvidia-smi` command
-2. Tests existing PyTorch CUDA availability
-3. Installs appropriate packages based on detection
+`.env` holds `TELEGRAM_BOT_TOKEN` (from @BotFather) and `WEB_UI_PASSWORD`.
+Neither is ever read from `config.yaml`. Without the token there are no alerts;
+without the password the web UI does not start. Detection runs regardless.
 
-### Manual GPU Configuration
+## 4. Captions (optional)
 
-#### Force Enable GPU Support
 ```bash
-python scripts/install.py --gpu
+python scripts/setup_ollama.py          # installs Ollama, pulls the tier's model
 ```
 
-#### Force Disable GPU Support (CPU-only)
-```bash
-python scripts/install.py --no-gpu
-```
+Linux/macOS use Ollama's own installer (it asks for sudo); Windows users get
+the download link. Skip this and alerts arrive without the one-line description.
 
-#### Manual CUDA Installation
-If automatic detection fails:
-```bash
-# Install CUDA-enabled PyTorch
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+## 5. Run
 
-# Verify CUDA availability
-python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
-```
-
-## 🔧 Troubleshooting Installation
-
-### Common Issues
-
-#### 1. Python Version Error
-```
-❌ Python 3.8+ required!
-```
-**Solution:** Install Python 3.8 or higher from [python.org](https://www.python.org/downloads/)
-
-#### 2. Virtual Environment Warning
-```
-⚠️ Not in virtual environment
-```
-**Solution:** Create and activate a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-venv\Scripts\activate     # Windows
-```
-
-#### 3. Face Recognition Models
-Face recognition runs on InsightFace (`insightface` + `onnxruntime`, both in
-`requirements.txt`). The model pack for your tier (`buffalo_sc` ≈ 15 MB,
-`buffalo_l` ≈ 280 MB) downloads to `~/.insightface/models` on the first run,
-and the pet re-ID checkpoint (`dinov2-small` 88 MB / `dinov2-base` 346 MB) to
-`~/.cache/huggingface`, so the first start needs internet. For CUDA inference replace `onnxruntime`
-with `onnxruntime-gpu`.
-
-#### 4. OpenCV Installation Issues
-```bash
-# Try alternative OpenCV package
-pip uninstall opencv-python
-pip install opencv-python-headless
-```
-
-#### 5. CUDA/GPU Issues
-```bash
-# Check CUDA installation
-nvidia-smi
-
-# Reinstall PyTorch with CUDA
-pip uninstall torch torchvision
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-```
-
-### Dependency Conflicts
-
-#### Reset Installation
-```bash
-# Remove all packages and reinstall
-pip freeze > installed_packages.txt
-pip uninstall -r installed_packages.txt -y
-python scripts/install.py --force
-```
-
-#### Clean Virtual Environment
-```bash
-# Create fresh environment
-deactivate
-rm -rf venv  # Linux/Mac
-rmdir /s venv  # Windows
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-venv\Scripts\activate     # Windows
-python scripts/install.py
-```
-
-## 📋 Installation Verification
-
-### Quick Test
-```bash
-python -c "
-import cv2, numpy, torch, ultralytics, face_recognition
-print('✅ All core modules imported successfully')
-print(f'OpenCV: {cv2.__version__}')
-print(f'PyTorch: {torch.__version__}')
-print(f'CUDA available: {torch.cuda.is_available()}')
-"
-```
-
-### Full System Test
-```bash
-# Run comprehensive test
-python scripts/check_dependencies.py
-
-# Test core imports
-python -c "
-from core.detection_engine import DetectionEngine
-from core.face_recognition import FaceRecognitionSystem
-from core.animal_recognition import AnimalRecognitionSystem
-print('✅ All core systems can be imported')
-"
-```
-
-## 🌐 Platform-Specific Notes
-
-### Windows 11 (Detailed Guide)
-
-#### Common Windows Issues & Solutions
-
-**Issue: "Microsoft Visual C++ 14.0 or greater is required"**
-No package in `requirements.txt` needs a compiler any more (`insightface` 2.0
-is a pure-Python wheel). If you see this, a stale `pip` picked an old sdist —
-`pip install --upgrade pip` and retry.
-
-**Issue: "Permission denied"**
-```powershell
-# Run PowerShell as Administrator
-```
-
-**Issue: "Execution policy restricted"**
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-**Issue: "Long path names"**
-- Enable long paths in Windows or move project to shorter path
-
-#### Windows Performance Tips
-1. **Use SSD**: Install on SSD for better performance
-2. **Close unnecessary programs**: Free up RAM and CPU
-3. **Windows Defender**: Add project folder to exclusions
-4. **Power settings**: Use "High performance" mode
-5. **GPU drivers**: Update NVIDIA drivers for CUDA support
-
-#### Windows Verification
-```powershell
-# Test core functionality
-python -c "import cv2, torch, ultralytics; print('✅ Core modules OK')"
-
-# Test face recognition (if installed)
-python -c "import face_recognition; print('✅ Face recognition OK')"
-
-# Run the application
-python main.py
-```
-
-### Linux (Ubuntu/Debian)
-```bash
-# Install system dependencies
-sudo apt update
-sudo apt install python3-dev python3-pip cmake build-essential
-```
-
-### macOS
-```bash
-# Install Xcode command line tools
-xcode-select --install
-
-# Install Homebrew (if not installed)
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-# Install dependencies
-brew install cmake
-```
-
-## 📊 Installation Size
-
-**Typical Installation Sizes:**
-- **CPU-only**: ~2.5GB
-- **GPU (CUDA)**: ~4.5GB
-- **Full development**: ~6GB
-
-**Breakdown:**
-- PyTorch: ~1.5GB (CPU) / ~3GB (GPU)
-- OpenCV: ~200MB
-- Face Recognition: ~100MB
-- YOLO Models: ~50MB (downloaded on first run)
-- Other dependencies: ~500MB
-
-## 🚀 Post-Installation
-
-### First Run
 ```bash
 python main.py
 ```
 
-### Initial Configuration
-1. **Camera Setup**: add cameras on the web UI's Cameras page
-2. **Telegram Bot**: Add bot token in Notification Center
-3. **Entity Registration**: Add known people and pets
-4. **Threshold Tuning**: Adjust confidence levels
+Open `http://<this machine>:8000`, add a camera on the Cameras page
+([CAMERA_SETUP.md](CAMERA_SETUP.md) has the RTSP paths), your chat id on the
+Telegram page ([TELEGRAM_SETUP.md](TELEGRAM_SETUP.md)), then enrol people and
+pets. `config.yaml` → `tier: low|high` picks the model sizes; the nav bar
+switch does the same without a restart.
 
-### Performance Optimization
-```bash
-# Check system performance
-python -c "
-from utils.gpu_optimization import GPUOptimizer
-optimizer = GPUOptimizer()
-print(optimizer.get_hardware_info())
-"
-```
+## Troubleshooting
 
-## 💡 Tips for Faster Installation
-
-1. **Use Virtual Environment**: Isolates dependencies
-2. **Check First**: Run dependency check before installing
-3. **Selective Install**: Use smart installer to avoid unnecessary downloads
-4. **Cache Packages**: pip automatically caches downloaded packages
-5. **Parallel Downloads**: pip installs multiple packages simultaneously
-
-## 🆘 Getting Help
-
-If you encounter issues:
-
-1. **Check Logs**: Look for error messages in the installation output
-2. **Dependency Check**: Run `python scripts/check_dependencies.py`
-3. **System Requirements**: Verify your system meets minimum requirements
-4. **Clean Install**: Try a fresh virtual environment
-5. **GitHub Issues**: Report persistent issues with detailed error logs
-
-## 📝 Manual Installation (Advanced)
-
-If automated installation fails, you can install dependencies manually:
-
-```bash
-# Core AI/ML packages
-pip install torch>=2.0.0 torchvision>=0.15.0
-pip install ultralytics>=8.0.0
-pip install opencv-python>=4.8.0
-pip install insightface>=2.0 onnxruntime>=1.20
-pip install numpy>=1.24.0
-pip install Pillow>=10.0.0
-
-# System and utilities
-pip install requests>=2.31.0
-pip install psutil>=5.9.0
-pip install PyYAML>=6.0
-pip install python-dotenv>=1.0.0
-
-# Optional GPU monitoring
-pip install "nvidia-ml-py>=12.535,<13"
-
-# Test installation
-python scripts/check_dependencies.py
-```
-
----
-
-**Ready to start detecting intruders? 🚀**
-
-After successful installation, run `python main.py` to launch the system!
+- **`python main.py` exits with a config error** — the message names the
+  `config.yaml` key. `tier` must be `low` or `high`.
+- **"Event captions off"** in the log — Ollama is not running or the model is
+  not pulled; step 4. Everything else works.
+- **Face recognition slow on a GPU machine** — `onnxruntime` (CPU) is
+  installed rather than `onnxruntime-gpu`, or their CUDA versions differ.
+  Face-ID still works, at CPU speed (60–100 ms per frame).
+- **Camera test fails** — open the URL in VLC first; if VLC plays it, this
+  system will. Set the camera's I-frame interval to 1–2 s.
+- **Windows: "cannot access the file because it is being used"** on the
+  database — another `main.py` is still running.
+- **Everything is slow on a CPU** — `tier: low`, and confirm the log says
+  `Selected optimal model: pytorch`; the ONNX exports are slower on a CPU.

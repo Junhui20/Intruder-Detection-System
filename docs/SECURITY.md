@@ -43,11 +43,11 @@ nano .env  # or vim, code, etc.
 ### 2. Required Environment Variables
 
 ```bash
-# Telegram Bot Configuration (REQUIRED)
+# Telegram Bot Configuration (required for alerts)
 TELEGRAM_BOT_TOKEN=your_bot_token_here
 
-# Optional: Restrict to specific chat
-TELEGRAM_CHAT_ID=your_chat_id_here
+# Web UI password (required for the web UI; it does not start without one)
+WEB_UI_PASSWORD=choose_one
 ```
 
 ### 3. Optional Environment Variables
