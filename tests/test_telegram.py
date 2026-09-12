@@ -118,7 +118,8 @@ class TestCommands(unittest.TestCase):
             self.bot._command(7, {"text": "/enroll Ada Lovelace", "reply_to_message": {"message_id": 42}})
         kind, name, paths, class_id = self.system.enrol.call_args.args
         self.assertEqual((kind, name, class_id), ("human", "Ada Lovelace", None))
-        self.assertTrue(paths[0].startswith("data/faces/ada_lovelace_"))
+        self.assertEqual(Path(paths[0]).parts[:2], ("data", "faces"))
+        self.assertTrue(Path(paths[0]).name.startswith("ada_lovelace_"))
         self.assertEqual(cv2.imread(paths[0]).shape, (30, 30, 3))  # the box plus 20 px of context
 
     def test_enroll_that_finds_no_face_is_undone(self):
