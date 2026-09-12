@@ -104,7 +104,8 @@ class TestDatabaseManager(unittest.TestCase):
     def test_legacy_rows_get_a_url_on_open(self):
         """A database from before the url column exists is upgraded, not broken."""
         os.unlink(self.temp_db.name)
-        with sqlite3.connect(self.temp_db.name) as conn:
+        conn = sqlite3.connect(self.temp_db.name)
+        with conn:  # commits; close() below matters on Windows, where an open file cannot be unlinked
             conn.executescript("""
                 CREATE TABLE devices (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, ip_address TEXT NOT NULL,
@@ -114,6 +115,7 @@ class TestDatabaseManager(unittest.TestCase):
                 INSERT INTO devices (ip_address, port, use_https, end_with_video)
                 VALUES ('192.168.1.5', 4747, 0, 1), ('cam.local', 443, 1, 0);
             """)
+        conn.close()
         devices = DatabaseManager(self.temp_db.name).get_all_devices()
         self.assertEqual([d.url for d in devices],
                          ["http://192.168.1.5:4747/video", "https://cam.local:443"])
