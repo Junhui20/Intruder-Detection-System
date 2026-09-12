@@ -1,0 +1,16 @@
+body { margin: 0; font: 15px/1.5 system-ui, sans-serif; color: #222; background: #f7f7f5; }
+nav { display: flex; gap: 1.2rem; align-items: center; padding: .6rem 1rem; background: #1f2a30; }
+nav a { color: #eee; text-decoration: none; }
+nav .tier { margin-left: auto; color: #bbb; }
+main { max-width: 960px; margin: 1.5rem auto; padding: 0 1rem; }
+table { width: 100%; border-collapse: collapse; }
+td, th { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid #ddd; vertical-align: middle; }
+img.thumb { height: 48px; border-radius: 3px; }
+img.live { width: 100%; max-height: 70vh; object-fit: contain; background: #000; border-radius: 4px; }
+form.inline { display: inline; }
+form.card { display: grid; gap: .5rem; grid-template-columns: 1fr 1fr; max-width: 560px; padding: 1rem; background: #fff; border: 1px solid #ddd; border-radius: 4px; margin-top: 1rem; }
+form.card label { display: flex; flex-direction: column; font-size: .9em; color: #555; }
+form.card input, form.card select { font: inherit; padding: .3rem; }
+button { font: inherit; padding: .3rem .8rem; cursor: pointer; }
+.ok { color: #1a7f37; } .bad { color: #b42318; }
+.muted { color: #777; }

@@ -228,7 +228,7 @@ def main():
         print(f"📁 Database file: {args.db_path}")
         print("💡 Next steps:")
         print("1. Run setup_environment.py to complete setup")
-        print("2. Add your own data using the GUI")
+        print("2. Enrol people, pets and cameras on the web UI")
         print("3. Start the detection system with main.py")
     else:
         print("\n❌ Database creation failed!")

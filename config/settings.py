@@ -78,13 +78,9 @@ class Settings:
     send_photos: bool = True
     photo_quality: int = 85  # JPEG quality (1-100)
     
-    # GUI settings
-    theme: str = "dark"  # dark or light
-    window_size: str = "1280x720"
-    auto_refresh_interval: int = 100  # Milliseconds
-    show_performance_metrics: bool = True
-    show_detection_confidence: bool = True
-    enable_real_time_controls: bool = True
+    # Web UI (only starts when WEB_UI_PASSWORD is set)
+    web_host: str = "0.0.0.0"  # the LAN; reach it remotely over Tailscale, never a port-forward
+    web_port: int = 8000
 
     # Camera management settings
     auto_fix_camera_ids: bool = False  # Auto-reorganize camera IDs on startup

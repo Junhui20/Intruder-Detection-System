@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% block title %}Cameras{% endblock %}{% block body %}
+<table>
+  <tr><th>#</th><th>Stream</th><th></th><th></th></tr>
+  {% for r in rows %}
+  <tr>
+    <td>{{ r.id }}</td>
+    <td><code>{{ r.url }}</code></td>
+    <td><button hx-post="/cameras/{{ r.id }}/test" hx-target="next span">test</button> <span class="muted"></span></td>
+    <td><button hx-delete="/cameras/{{ r.id }}" hx-target="closest tr" hx-swap="outerHTML" hx-confirm="Remove camera {{ r.id }}?">remove</button></td>
+  </tr>
+  {% else %}<tr><td colspan="4" class="muted">No cameras; the local webcam is used.</td></tr>{% endfor %}
+</table>
+<form class="card" method="post" action="/cameras">
+  <label style="grid-column: span 2">Stream URL <input name="url" placeholder="rtsp://user:pw@192.168.1.20:554/stream2 — or fill in the parts below"></label>
+  <label>Protocol <select name="protocol"><option>rtsp</option><option>http</option><option>https</option></select></label>
+  <label>Host <input name="host" placeholder="192.168.1.20"></label>
+  <label>Port <input name="port" type="number" value="0" title="0 = protocol default"></label>
+  <label>Path <input name="path" placeholder="/stream2, /video for DroidCam"></label>
+  <label>Username <input name="username"></label>
+  <label>Password <input name="password" type="password"></label>
+  <button>Add camera</button>
+</form>
+<p class="muted">Vendor paths are listed in docs/CAMERA_SETUP.md.</p>
+{% endblock %}

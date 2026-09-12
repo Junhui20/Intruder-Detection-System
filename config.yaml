@@ -18,10 +18,9 @@ detection:
   yolo_confidence: 0.6
   yolo_iou_threshold: 0.5
   yolo_max_detections: 50
-gui:
-  auto_refresh_interval: 200
-  enable_real_time_controls: true
-  show_performance_metrics: true
+web:
+  host: 0.0.0.0  # LAN only; use Tailscale for remote access, never port-forward
+  port: 8000
 performance:
   enable_gpu: true
   enable_performance_monitoring: true
