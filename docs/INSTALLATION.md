@@ -1,4 +1,4 @@
-# 📦 Installation Guide - Intruder Detection System 2025
+# 📦 Installation Guide - Intruder Detection System
 
 ## 🚀 Quick Start (Recommended)
 

@@ -2,7 +2,7 @@
 SQLite Database Manager
 
 This module provides comprehensive database operations for the Intruder Detection System,
-including CRUD operations, migrations, and connection management.
+including CRUD operations and connection management.
 """
 
 import sqlite3

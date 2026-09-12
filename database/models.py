@@ -1,8 +1,7 @@
 """
 SQLite Data Models for the Intruder Detection System
 
-This module defines the data models and schemas for the SQLite database,
-migrated from MariaDB for better performance and simplicity.
+This module defines the data models and schemas for the SQLite database.
 """
 
 from dataclasses import dataclass
