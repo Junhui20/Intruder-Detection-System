@@ -419,7 +419,7 @@ class MultiCameraManager:
 
                         # Capture frame
                         frame_start = time.time()
-                        frame = camera_manager.get_frame()
+                        frame = camera_manager.capture_frame()
 
                         if frame is not None:
                             # Create camera frame object
@@ -462,8 +462,7 @@ class MultiCameraManager:
                         logger.error(f"Error in camera worker {camera_id}: {e}")
                         time.sleep(0.1)
 
-                # Disconnect camera
-                camera_manager.disconnect()
+                camera_manager.release_all_cameras()
 
             else:
                 logger.error(f"Failed to connect camera {camera_id}")

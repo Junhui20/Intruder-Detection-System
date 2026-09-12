@@ -193,6 +193,11 @@ class TestAnimalRecognitionSystem(unittest.TestCase):
         stranger = self.pets.identify_animals(self.other, self.box(self.other))[0]
         self.assertEqual(stranger["recognition_status"], "unknown_animal")
 
+    def test_roster_is_keyed_by_the_name_alerts_use(self):
+        self.pets.load_known_pets([{"name": "Jacky", "individual_id": "jacky", "coco_class_id": 16,
+                                    "image_path": self.jacky_path, "multiple_photos": "not json"}])
+        self.assertEqual(list(self.pets.known_pets), ["Jacky"])  # not the slug, and the bad JSON is survived
+
     def test_a_cat_is_never_matched_against_an_enrolled_dog(self):
         self.pets.add_known_pet("Jacky", 16, [self.jacky_path])
         result = self.pets.identify_animals(self.jacky, self.box(self.jacky, class_id=15))[0]
