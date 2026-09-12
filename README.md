@@ -79,9 +79,9 @@ portfolio piece.
 - **Cameras** — RTSP (any Tapo / Hikvision / Dahua / Reolink / ONVIF camera,
   vendor paths in [docs/CAMERA_SETUP.md](docs/CAMERA_SETUP.md)), HTTP MJPEG,
   DroidCam (an old phone as a camera), local webcam fallback, multi-camera.
-- **Telegram** — alerts with photo, per-user notification settings, bot
-  commands *(planned: `/status /snapshot /arm /disarm /mute 1h`, and
-  `/enroll <name>` by replying to an alert photo)*.
+- **Telegram** — alerts with photo and caption; `/status`, `/snapshot`,
+  `/arm`, `/disarm`, `/mute 1h`; and `/enroll Name` as a reply to an alert
+  photo, which makes that person or pet family without opening a browser.
 - **Web UI** — live view (MJPEG), event history with the alert photos,
   enrol / forget people and pets, add / test / remove cameras, tier switch.
   FastAPI + Jinja2 + htmx, no build step, one password, LAN only.
@@ -186,7 +186,7 @@ methods.
 | T5 | Ollama event captions + setup script | done |
 | T6–T7 | Pet re-ID: model choice, enrol → embed → match, eval | done |
 | T8 | Web UI, delete tkinter | done |
-| T9 | Telegram commands, `/enroll` from an alert photo | |
+| T9 | Telegram commands, `/enroll` from an alert photo | done |
 | T10 | `bench.py` + both tiers' numbers | |
 | T11–T12 | MYR prices, final README with screenshots | |
 
