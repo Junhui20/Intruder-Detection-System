@@ -96,6 +96,28 @@ class TestDatabaseManager(unittest.TestCase):
         self.assertEqual(retrieved_device.ip_address, "192.168.1.101")
         self.assertEqual(retrieved_device.port, 8080)
     
+    def test_rtsp_device_round_trips_by_url(self):
+        url = "rtsp://admin:pw@192.168.1.20:554/stream1"
+        device_id = self.db_manager.create_device(Device(url=url))
+        self.assertEqual(self.db_manager.get_device(device_id).url, url)
+
+    def test_legacy_rows_get_a_url_on_open(self):
+        """A database from before the url column exists is upgraded, not broken."""
+        os.unlink(self.temp_db.name)
+        with sqlite3.connect(self.temp_db.name) as conn:
+            conn.executescript("""
+                CREATE TABLE devices (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, ip_address TEXT NOT NULL,
+                    port INTEGER NOT NULL, use_https BOOLEAN DEFAULT 0,
+                    end_with_video BOOLEAN DEFAULT 0, status TEXT DEFAULT 'active',
+                    created_at DATETIME, updated_at DATETIME);
+                INSERT INTO devices (ip_address, port, use_https, end_with_video)
+                VALUES ('192.168.1.5', 4747, 0, 1), ('cam.local', 443, 1, 0);
+            """)
+        devices = DatabaseManager(self.temp_db.name).get_all_devices()
+        self.assertEqual([d.url for d in devices],
+                         ["http://192.168.1.5:4747/video", "https://cam.local:443"])
+
     def test_add_whitelist_entry(self):
         """Test adding a whitelist entry."""
         entry = WhitelistEntry(

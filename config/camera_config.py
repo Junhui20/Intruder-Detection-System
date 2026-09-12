@@ -1,43 +1,62 @@
 """
 Camera Configuration Management
 
-This module handles IP camera configurations and connection settings.
+A camera is a stream URL. HTTP/HTTPS MJPEG (DroidCam, IP Webcam) and RTSP
+(every mainstream IP camera) are opened the same way; the URL decides.
 """
 
 import logging
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
+from urllib.parse import quote, urlsplit
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_PORTS = {"http": 8080, "https": 8080, "rtsp": 554}
+
+
+def build_camera_url(
+    protocol: str, host: str, port: int = 0, path: str = "", username: str = "", password: str = ""
+) -> str:
+    """
+    Assemble a stream URL from form fields.
+
+    Args:
+        protocol: ``http``, ``https`` or ``rtsp``.
+        host: IP address or hostname.
+        port: 0 picks the protocol default (8080 for DroidCam-style HTTP, 554 for RTSP).
+        path: Stream path, e.g. ``/video`` (DroidCam) or ``/stream1`` (Tapo).
+        username: Optional; credentials are URL-encoded.
+        password: Optional.
+
+    Returns:
+        The URL, e.g. ``rtsp://admin:pw@192.168.1.20:554/stream1``.
+    """
+    auth = f"{quote(username, safe='')}:{quote(password, safe='')}@" if username else ""
+    port = port or DEFAULT_PORTS[protocol]
+    path = "/" + path.lstrip("/") if path else ""
+    return f"{protocol}://{auth}{host}:{port}{path}"
 
 
 @dataclass
 class CameraConfig:
     """
-    IP Camera configuration with HTTP/HTTPS support.
-    
-    Features:
-    - Flexible URL construction
-    - Protocol support (HTTP/HTTPS)
-    - Connection testing
-    - Fallback configuration
+    One camera. ``url`` is what gets opened; the other network fields only
+    exist to build it when a form supplied parts instead of a URL.
     """
     
     # Camera identification
     id: Optional[int] = None
     name: str = ""
     
-    # Network settings
+    # Stream URL — the source of truth when set
+    url: str = ""
+
+    # Parts used to build the URL when ``url`` is empty
     ip_address: str = "192.168.1.100"
     port: int = 8080
-    use_https: bool = False
-    
-    # URL configuration
+    protocol: str = "http"  # http, https or rtsp
     url_suffix: str = "/video"
-    end_with_video: bool = True
-    custom_url: str = ""  # Override automatic URL construction
-    
-    # Authentication (if needed)
     username: str = ""
     password: str = ""
     
@@ -61,77 +80,37 @@ class CameraConfig:
     buffer_size: int = 1
     
     def get_camera_url(self) -> str:
-        """
-        Construct the camera URL based on configuration.
-        
-        Returns:
-            Complete camera URL
-        """
-        if self.custom_url:
-            return self.custom_url
-        
-        protocol = "https" if self.use_https else "http"
-        
-        # Handle authentication
-        auth_part = ""
-        if self.username and self.password:
-            auth_part = f"{self.username}:{self.password}@"
-        
-        # Construct base URL
-        base_url = f"{protocol}://{auth_part}{self.ip_address}:{self.port}"
-        
-        # Add suffix
-        if self.end_with_video and self.url_suffix:
-            if not self.url_suffix.startswith('/'):
-                self.url_suffix = '/' + self.url_suffix
-            return base_url + self.url_suffix
-        elif self.url_suffix:
-            if not self.url_suffix.startswith('/'):
-                self.url_suffix = '/' + self.url_suffix
-            return base_url + self.url_suffix
-        else:
-            return base_url
-    
+        """The URL to open: ``url`` as given, else built from the parts."""
+        return self.url or build_camera_url(
+            self.protocol, self.ip_address, self.port, self.url_suffix, self.username, self.password
+        )
+
     def test_connection(self) -> Tuple[bool, str]:
         """
-        Test camera connection.
-        
+        Open the stream and read one frame.
+
         Returns:
-            Tuple of (success, message)
+            (success, message); the message carries the frame size or the reason.
         """
-        try:
+        from core.camera_manager import open_stream
+
+        url = self.get_camera_url()
+        if url.startswith("http"):  # cheap reachability check before FFmpeg's slow failure
             import requests
-            import cv2
-            
-            url = self.get_camera_url()
-            
-            # Test HTTP/HTTPS connection first
+
             try:
-                response = requests.head(url, timeout=self.connection_timeout)
-                if response.status_code >= 400:
-                    return False, f"HTTP error: {response.status_code}"
+                requests.head(url, timeout=self.connection_timeout)
             except requests.exceptions.RequestException as e:
                 return False, f"Network error: {e}"
-            
-            # Test video capture
-            try:
-                cap = cv2.VideoCapture(url)
-                if not cap.isOpened():
-                    return False, "Failed to open video stream"
-                
-                ret, frame = cap.read()
-                cap.release()
-                
-                if not ret or frame is None:
-                    return False, "Failed to capture frame"
-                
-                return True, f"Connection successful ({frame.shape[1]}x{frame.shape[0]})"
-                
-            except Exception as e:
-                return False, f"Video capture error: {e}"
-                
+        try:
+            cap = open_stream(url)
+            ok, frame = cap.read() if cap.isOpened() else (False, None)
+            cap.release()
         except Exception as e:
-            return False, f"Test failed: {e}"
+            return False, f"Video capture error: {e}"
+        if not ok or frame is None:
+            return False, "Could not read a frame"
+        return True, f"Connection successful ({frame.shape[1]}x{frame.shape[0]})"
     
     def validate(self) -> Dict[str, str]:
         """
@@ -142,6 +121,15 @@ class CameraConfig:
         """
         errors = {}
         
+        if self.url:
+            parts = urlsplit(self.url)
+            if parts.scheme not in DEFAULT_PORTS or not parts.hostname:
+                errors['url'] = "URL must be http(s)://host[:port]/path or rtsp://host[:port]/path"
+            return errors
+
+        if self.protocol not in DEFAULT_PORTS:
+            errors['protocol'] = "Protocol must be http, https or rtsp"
+
         # Validate IP address
         if not self.ip_address:
             errors['ip_address'] = "IP address is required"
@@ -186,8 +174,8 @@ class CameraConfig:
         return errors
     
     def to_dict(self) -> Dict:
-        """Convert to dictionary for database storage."""
-        return asdict(self)
+        """Fields plus the resolved ``url``, which is all the camera manager reads."""
+        return {**asdict(self), "url": self.get_camera_url()}
     
     @classmethod
     def from_dict(cls, data: Dict) -> 'CameraConfig':
@@ -196,7 +184,7 @@ class CameraConfig:
     
     def __str__(self) -> str:
         """String representation."""
-        return f"CameraConfig({self.name or self.ip_address}:{self.port})"
+        return f"CameraConfig({self.name or self.get_camera_url()})"
 
 
 class CameraConfigManager:
@@ -347,17 +335,9 @@ class CameraConfigManager:
             self.cameras.clear()
             
             for device in devices:
-                config = CameraConfig(
-                    id=device.id,
-                    name=f"Camera {device.id}",
-                    ip_address=device.ip_address,
-                    port=device.port,
-                    use_https=device.use_https,
-                    end_with_video=device.end_with_video,
-                    status=device.status
+                self.cameras[device.id] = CameraConfig(
+                    id=device.id, name=f"Camera {device.id}", url=device.url, status=device.status
                 )
-                
-                self.cameras[device.id] = config
             
             logger.info(f"Loaded {len(self.cameras)} cameras from database")
             return True
@@ -380,14 +360,7 @@ class CameraConfigManager:
             from database.models import Device
             
             for config in self.cameras.values():
-                device = Device(
-                    id=config.id,
-                    ip_address=config.ip_address,
-                    port=config.port,
-                    use_https=config.use_https,
-                    end_with_video=config.end_with_video,
-                    status=config.status
-                )
+                device = Device(id=config.id, url=config.get_camera_url(), status=config.status)
                 
                 if config.id and db_manager.get_device(config.id):
                     db_manager.update_device(device)

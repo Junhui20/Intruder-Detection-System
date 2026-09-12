@@ -72,9 +72,9 @@ portfolio piece.
 - **Event captions** — a local vision-language model writes one line per alert
   ("person in a red jacket at the side gate"). *(Planned, via Ollama; off
   gracefully if Ollama is not running.)*
-- **Cameras** — IP cameras over HTTP/HTTPS, DroidCam (an old phone as a
-  camera), RTSP *(planned as first-class; works today via `custom_url`)*,
-  local webcam fallback, multi-camera.
+- **Cameras** — RTSP (any Tapo / Hikvision / Dahua / Reolink / ONVIF camera,
+  vendor paths in [docs/CAMERA_SETUP.md](docs/CAMERA_SETUP.md)), HTTP MJPEG,
+  DroidCam (an old phone as a camera), local webcam fallback, multi-camera.
 - **Telegram** — alerts with photo, per-user notification settings, bot
   commands *(planned: `/status /snapshot /arm /disarm /mute 1h`, and
   `/enroll <name>` by replying to an alert photo)*.
@@ -138,7 +138,7 @@ methods.
 |---|---|---|
 | T1 | Cleanup + this README skeleton | done |
 | T2 | CI matrix: Ubuntu × Windows × Python 3.12/3.14 | |
-| T3 | RTSP first-class | |
+| T3 | RTSP first-class | done |
 | T4 | InsightFace face backend (replaces LBPH) | done |
 | T5 | Ollama event captions + setup script | |
 | T6–T7 | Pet re-ID: model choice, enrol → embed → match, PetFace eval | |

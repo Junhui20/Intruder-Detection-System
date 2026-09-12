@@ -79,40 +79,28 @@ def create_test_cameras() -> list:
         CameraConfig(
             camera_id="front_door",
             name="Front Door Camera",
-            ip_address="192.168.1.100",
-            port=8080,
-            protocol="http",
-            video_suffix="/video",
+            url="http://192.168.1.100:8080/video",
             priority=3,
             enabled=True
         ),
         CameraConfig(
             camera_id="backyard",
             name="Backyard Camera",
-            ip_address="192.168.1.101",
-            port=8080,
-            protocol="http",
-            video_suffix="/video",
+            url="http://192.168.1.101:8080/video",
             priority=2,
             enabled=True
         ),
         CameraConfig(
             camera_id="garage",
             name="Garage Camera",
-            ip_address="192.168.1.102",
-            port=8080,
-            protocol="http",
-            video_suffix="/video",
+            url="http://192.168.1.102:8080/video",
             priority=1,
             enabled=True
         ),
         CameraConfig(
             camera_id="side_entrance",
             name="Side Entrance Camera",
-            ip_address="192.168.1.103",
-            port=8080,
-            protocol="http",
-            video_suffix="/video",
+            url="http://192.168.1.103:8080/video",
             priority=1,
             enabled=False  # Disabled for testing
         )
