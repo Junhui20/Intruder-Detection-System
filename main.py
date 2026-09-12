@@ -229,34 +229,29 @@ class IntruderDetectionSystem:
             else:
                 logger.info("Initializing Standard Detection Engine...")
 
-            self.detection_engine = DetectionEngine.from_config(self.detection_config)
-            
-            # Initialize face recognition system
-            self.face_recognition = FaceRecognitionSystem(
+            engine = DetectionEngine.from_config(self.detection_config)
+
+            # Both recognisers are built and given their rosters before they replace
+            # the live ones: the detection thread must never see an empty roster.
+            faces = FaceRecognitionSystem(
                 confidence_threshold=self.detection_config.human_confidence_threshold,
                 max_faces_per_frame=self.detection_config.max_faces_per_frame,
                 model=self.settings.face_model or FACE_MODELS[self.settings.tier],
                 use_gpu=self.settings.enable_gpu,
             )
-            
-            # Load known faces from database
-            humans = self.db_manager.get_whitelist_entries(entity_type="human")
-            human_data = [entry.to_dict() for entry in humans]
-            self.face_recognition.load_known_faces(human_data)
-            
-            # Initialize animal recognition system
-            self.animal_recognition = AnimalRecognitionSystem(
+            pets = AnimalRecognitionSystem(
                 confidence_threshold=self.detection_config.animal_confidence_threshold,
                 pet_identification_threshold=self.detection_config.pet_identification_threshold,
                 model=self.settings.pet_model or PET_MODELS[self.settings.tier],
                 use_gpu=self.settings.enable_gpu,
             )
-            
-            # Load known pets from database
-            animals = self.db_manager.get_whitelist_entries(entity_type="animal")
-            animal_data = [entry.to_dict() for entry in animals]
-            self.animal_recognition.load_known_pets(animal_data)
-            
+            if faces.backend_type != "insightface" or pets.model is None:
+                logger.error("A recognition model failed to load; see the errors above")
+                return False
+            faces.load_known_faces([e.to_dict() for e in self.db_manager.get_whitelist_entries(entity_type="human")])
+            pets.load_known_pets([e.to_dict() for e in self.db_manager.get_whitelist_entries(entity_type="animal")])
+            self.detection_engine, self.face_recognition, self.animal_recognition = engine, faces, pets
+
             logger.info("Detection systems initialized successfully")
             return True
             
@@ -291,15 +286,7 @@ class IntruderDetectionSystem:
     def _initialize_notification_system(self) -> bool:
         """Initialize Telegram notification system."""
         try:
-            # Get bot token from config manager (telegram.bot_token)
-            bot_token = None
-            if self.config_manager:
-                bot_token = self.config_manager.get('telegram.bot_token')
-
-            # Fallback to settings if not in config manager
-            if not bot_token and hasattr(self.settings, 'bot_token'):
-                bot_token = self.settings.bot_token
-
+            bot_token = self.settings.bot_token  # TELEGRAM_BOT_TOKEN only; config.yaml is ignored
             if not bot_token:
                 logger.warning("No Telegram bot token configured")
                 return True
@@ -738,8 +725,8 @@ class IntruderDetectionSystem:
             (photo_path, whether a notification was queued)
         """
         photo_path = self._capture_detection_screenshot(frame, label, confidence)
-        if not self.notification_system:
-            return photo_path, False
+        if not self.notification_system or time.time() < self.notification_system.muted_until:
+            return photo_path, False  # nobody is told: no bot, or /disarm or /mute
         snapshot = frame.copy()
 
         context = {"kind": kind, "label": subject, "bbox": bbox, "class_id": class_id}
@@ -850,7 +837,7 @@ class IntruderDetectionSystem:
         if not self._initialize_detection_systems():
             self.settings.tier = previous
             logger.error(f"Tier {tier} not applied: its models failed to load; still on {previous}")
-            return
+            return  # the live recognisers were never replaced
         if self.captioner:
             try:
                 self.captioner = EventCaptioner(

@@ -114,26 +114,37 @@ class AnimalRecognitionSystem:
         Returns:
             True if at least one photo was readable.
         """
+        pet = self._embed_pet(name, class_id, image_paths)
+        if pet:
+            self.known_pets = {
+                **self.known_pets,
+                name: pet,
+            }  # one assignment, never a mutation
+        return pet is not None
+
+    def _embed_pet(
+        self, name: str, class_id: int, image_paths: List[str]
+    ) -> Optional[dict]:
+        if class_id not in ANIMAL_CLASSES:
+            logger.warning(
+                f"{name} not enrolled: class {class_id!r} is not an animal YOLO reports"
+            )
+            return None
         images = [
             im
             for p in image_paths
             if os.path.exists(p) and (im := cv2.imread(p)) is not None
         ]
-        if class_id not in ANIMAL_CLASSES:
-            logger.warning(
-                f"{name} not enrolled: class {class_id!r} is not an animal YOLO reports"
-            )
-            return False
         if not images or self.model is None:
             logger.warning(f"No photos enrolled for {name}")
-            return False
-        self.known_pets[name] = {"class_id": class_id, "embeddings": self.embed(images)}
-        return True
+            return None
+        return {"class_id": class_id, "embeddings": self.embed(images)}
 
     def load_known_pets(self, pets_data: List[Dict]) -> None:
         """
-        Replace the roster with whitelist rows (``name``/``individual_id``,
-        ``coco_class_id``, ``image_path``, optional JSON ``multiple_photos``).
+        Replace the roster with whitelist rows (``name``, ``coco_class_id``,
+        ``image_path``, optional JSON ``multiple_photos``). Keyed by ``name``,
+        which is what alerts and /enroll use.
         """
         roster = {}
         for row in pets_data:
@@ -141,13 +152,13 @@ class AnimalRecognitionSystem:
                 extra = json.loads(row.get("multiple_photos") or "[]")
             except ValueError:
                 extra = []  # a bad row loses its extra photos, not the whole roster
-            name = row.get("individual_id") or row["name"]
-            if self.add_known_pet(
-                name, row["coco_class_id"], [row["image_path"]] + extra
-            ):
-                roster[name] = self.known_pets.pop(name)
+            pet = self._embed_pet(
+                row["name"], row["coco_class_id"], [row["image_path"]] + extra
+            )
+            if pet:
+                roster[row["name"]] = pet
         self.known_pets = (
-            roster  # one assignment: the detection thread reads it mid-frame
+            roster  # the detection thread reads it mid-frame; swap, never mutate
         )
         logger.info(f"Enrolled {len(self.known_pets)} pet(s)")
 
