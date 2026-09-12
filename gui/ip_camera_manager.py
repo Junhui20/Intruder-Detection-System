@@ -11,12 +11,13 @@ import threading
 import time
 from datetime import datetime
 from typing import Optional, Dict, Any
+from urllib.parse import unquote, urlsplit
 
 # Import backend components
 from database.database_manager import DatabaseManager
 from database.models import Device
 from core.camera_manager import CameraManager
-from config.camera_config import CameraConfig, CameraConfigManager
+from config.camera_config import CameraConfig, CameraConfigManager, build_camera_url
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +138,7 @@ class IPCameraManager:
         ttk.Label(form_frame, text="Protocol:").grid(row=2, column=0, sticky=tk.W, pady=5)
         self.form_vars['protocol_var'] = tk.StringVar(value="HTTP")
         protocol_combo = ttk.Combobox(form_frame, textvariable=self.form_vars['protocol_var'],
-                                    values=["HTTP", "HTTPS"], width=27)
+                                    values=["HTTP", "HTTPS", "RTSP"], width=27)
         protocol_combo.grid(row=2, column=1, sticky=tk.W, padx=(10, 0), pady=5)
 
         # URL suffix
@@ -218,15 +219,15 @@ class IPCameraManager:
                 devices = self.db_manager.get_all_devices()
 
                 for device in devices:
-                    protocol = "HTTPS" if device.use_https else "HTTP"
+                    parts = urlsplit(device.url)
                     status = "Active" if device.status == "active" else "Inactive"
                     last_seen = "Now" if device.status == "active" else "Unknown"
 
                     self.camera_tree.insert("", tk.END, values=(
                         device.id,
-                        device.ip_address,
-                        device.port,
-                        protocol,
+                        parts.hostname,
+                        parts.port,
+                        parts.scheme.upper(),
                         status,
                         last_seen
                     ))
@@ -242,10 +243,15 @@ class IPCameraManager:
             # Get form values
             ip_address = self.form_vars['ip_entry'].get().strip()
             port = int(self.form_vars['port_entry'].get().strip())
-            use_https = self.form_vars['protocol_var'].get() == "HTTPS"
+            protocol = self.form_vars['protocol_var'].get().lower()
+            use_https = protocol == "https"
             url_suffix = self.form_vars['suffix_entry'].get().strip()
-            # Determine if URL ends with video based on suffix (for backward compatibility)
-            end_with_video = url_suffix.endswith('/video') or url_suffix == '/video'
+            end_with_video = url_suffix.endswith('/video')
+            old = self.db_manager.get_device(self.editing_camera_id) if self.is_edit_mode else None
+            creds = urlsplit(old.url) if old else None
+            url = build_camera_url(protocol, ip_address, port, url_suffix,
+                                   unquote(creds.username or "") if creds else "",
+                                   unquote(creds.password or "") if creds else "")
 
             # Validate inputs
             if not ip_address:
@@ -260,6 +266,7 @@ class IPCameraManager:
                 # Update existing camera
                 device = Device(
                     id=self.editing_camera_id,
+                    url=url,
                     ip_address=ip_address,
                     port=port,
                     use_https=use_https,
@@ -278,6 +285,7 @@ class IPCameraManager:
             else:
                 # Create new camera
                 device = Device(
+                    url=url,
                     ip_address=ip_address,
                     port=port,
                     use_https=use_https,
@@ -360,19 +368,19 @@ class IPCameraManager:
             self.is_edit_mode = True
             self.editing_camera_id = camera_id
 
-            # Populate form with camera data
+            # Populate form from the stored URL; credentials stay with the row
+            parts = urlsplit(device.url)
             self.form_vars['ip_entry'].delete(0, tk.END)
-            self.form_vars['ip_entry'].insert(0, device.ip_address)
+            self.form_vars['ip_entry'].insert(0, parts.hostname or "")
 
             self.form_vars['port_entry'].delete(0, tk.END)
-            self.form_vars['port_entry'].insert(0, str(device.port))
+            self.form_vars['port_entry'].insert(0, str(parts.port or ""))
 
-            self.form_vars['protocol_var'].set("HTTPS" if device.use_https else "HTTP")
+            self.form_vars['protocol_var'].set(parts.scheme.upper())
 
-            # Update URL suffix field based on device settings
             if 'suffix_entry' in self.form_vars:
                 self.form_vars['suffix_entry'].delete(0, tk.END)
-                self.form_vars['suffix_entry'].insert(0, "/video" if device.end_with_video else "")
+                self.form_vars["suffix_entry"].insert(0, parts.path + ("?" + parts.query if parts.query else ""))
 
             # Update button text to indicate edit mode
             if hasattr(self, 'save_button'):
@@ -501,12 +509,8 @@ class IPCameraManager:
                 messagebox.showerror("Validation Error", "Port must be a valid number")
                 return
 
-            use_https = self.form_vars['protocol_var'].get() == "HTTPS"
             url_suffix = self.form_vars['suffix_entry'].get().strip()
-
-            # Construct URL
-            protocol = 'https' if use_https else 'http'
-            camera_url = f"{protocol}://{ip_address}:{port}{url_suffix}"
+            camera_url = build_camera_url(self.form_vars['protocol_var'].get().lower(), ip_address, port, url_suffix)
 
             # Update test URL field if it exists
             if 'test_url_entry' in self.form_vars:
@@ -522,56 +526,11 @@ class IPCameraManager:
                 self.results_text.configure(state=tk.DISABLED)
 
             # Run test in background thread
-            threading.Thread(target=self._run_form_connection_test,
-                           args=(ip_address, port, use_https, url_suffix),
-                           daemon=True).start()
+            threading.Thread(target=self._run_connection_test, args=(camera_url,), daemon=True).start()
 
         except Exception as e:
             logger.error(f"Failed to test form connection: {e}")
             messagebox.showerror("Error", f"Failed to test connection: {e}")
-
-    def _run_form_connection_test(self, ip_address: str, port: int, use_https: bool, url_suffix: str):
-        """Run connection test from form data in background thread."""
-        try:
-            # Construct URL
-            protocol = 'https' if use_https else 'http'
-            camera_url = f"{protocol}://{ip_address}:{port}{url_suffix}"
-
-            self._log_test_result(f"[{self._get_timestamp()}] Testing connection to {camera_url}")
-
-            # Test using camera manager
-            config = {
-                'ip_address': ip_address,
-                'port': port,
-                'use_https': use_https,
-                'end_with_video': url_suffix.endswith('/video') or url_suffix == '/video'
-            }
-
-            # Test connection
-            success = self.camera_manager.test_camera_connection(config)
-
-            if success:
-                self._log_test_result(f"[{self._get_timestamp()}] ✅ Connection test PASSED")
-                self._log_test_result(f"[{self._get_timestamp()}] Camera is accessible and responding")
-
-                # Show success message in main thread
-                self.form_vars['ip_entry'].after(0, lambda: messagebox.showinfo(
-                    "Connection Test", "✅ Connection successful! Camera is accessible."))
-            else:
-                self._log_test_result(f"[{self._get_timestamp()}] ❌ Connection test FAILED")
-                self._log_test_result(f"[{self._get_timestamp()}] Camera is not accessible")
-
-                # Show error message in main thread
-                self.form_vars['ip_entry'].after(0, lambda: messagebox.showerror(
-                    "Connection Test", "❌ Connection failed! Camera is not accessible."))
-
-        except Exception as e:
-            self._log_test_result(f"[{self._get_timestamp()}] ❌ Test error: {e}")
-            logger.error(f"Connection test error: {e}")
-
-            # Show error message in main thread
-            self.form_vars['ip_entry'].after(0, lambda: messagebox.showerror(
-                "Connection Test", f"❌ Test error: {e}"))
 
     def _test_url_connection(self):
         """Test connection to the specified URL."""
@@ -599,15 +558,7 @@ class IPCameraManager:
             self._log_test_result(f"[{self._get_timestamp()}] Testing connection to {camera_url}")
 
             # Test using camera manager
-            config = {
-                'ip_address': camera_url.split('://')[1].split(':')[0],
-                'port': int(camera_url.split(':')[-1].split('/')[0]),
-                'use_https': camera_url.startswith('https'),
-                'end_with_video': camera_url.endswith('/video')
-            }
-
-            # Test connection
-            success = self.camera_manager.test_camera_connection(config)
+            success = self.camera_manager.test_camera_connection({'url': camera_url})
 
             if success:
                 self._log_test_result(f"[{self._get_timestamp()}] ✅ Connection test PASSED")

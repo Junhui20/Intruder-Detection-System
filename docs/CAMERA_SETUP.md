@@ -8,7 +8,7 @@ This guide covers setting up IP cameras, local cameras, and troubleshooting came
 
 ### 1. IP Cameras
 - **HTTP/HTTPS streams**
-- **RTSP streams** 
+- **RTSP streams** (preferred for real IP cameras)
 - **DroidCam** (Android phone as camera)
 - **Generic IP cameras** with video endpoints
 
@@ -75,17 +75,44 @@ http://192.168.1.100:88/cgi-bin/CGIStream.cgi?cmd=GetMJStream
 
 ### RTSP Camera Setup
 
-**RTSP URL Format:**
-```bash
-rtsp://username:password@192.168.1.100:554/stream1
-rtsp://192.168.1.100:554/live/ch1
+Every mainstream IP camera (Tapo, Hikvision, Dahua, Reolink, Imou, Ezviz, Amcrest,
+anything ONVIF) speaks RTSP. It is the preferred protocol here: H.264 over TCP
+uses a fraction of MJPEG's bandwidth and the stream carries proper timestamps.
+
+**Add one:** IP Camera Manager → Add Camera → Protocol `RTSP`, port `554`,
+URL Suffix = the vendor path below → Test Connection → Save. Or paste the full
+URL straight into a `CameraConfig(url=...)`. Credentials go in the URL and are
+percent-encoded for you.
+
+**Vendor paths** (`main` is full resolution; use the sub-stream — the detector
+runs at 640 px anyway and it saves CPU on decode):
+
+| Vendor | Main stream | Sub stream |
+|---|---|---|
+| TP-Link Tapo / Vigi | `/stream1` | `/stream2` |
+| Hikvision, HiLook, Ezviz | `/Streaming/Channels/101` | `/Streaming/Channels/102` |
+| Dahua, Imou, Amcrest, Lorex | `/cam/realmonitor?channel=1&subtype=0` | `…&subtype=1` |
+| Reolink | `/h264Preview_01_main` | `/h264Preview_01_sub` |
+| Xiaomi (with RTSP hack firmware) | `/ch0_0.h264` | `/ch0_1.h264` |
+| Generic ONVIF | look it up in ONVIF Device Manager (Windows) or `onvif-cli` | |
+
+```
+rtsp://admin:secret@192.168.1.20:554/stream2
+rtsp://192.168.1.21:554/Streaming/Channels/102
 ```
 
-**Configuration:**
-1. Enable RTSP in camera settings
-2. Note username/password if required
-3. Find RTSP port (usually 554)
-4. Add to system with full RTSP URL
+**Find the path if it is not listed:** open the URL in VLC (Media → Open Network
+Stream). When VLC plays it, this system will too — both use FFmpeg.
+
+**Transport:** streams are opened over TCP (`OPENCV_FFMPEG_CAPTURE_OPTIONS` is set
+in `core/camera_manager.py`). UDP is faster on wired LAN but smears frames on
+Wi-Fi; if you need it, override the environment variable before starting.
+
+**Camera-side settings that matter:** enable RTSP / ONVIF in the camera app (Tapo
+and Ezviz hide it under "Advanced" and want a separate camera account); set the
+I-frame / GOP interval to 1–2 s — the connection test waits for a keyframe and
+gives up after 5 s; and turn off the camera's own motion-detection overlays so
+they do not confuse the detector.
 
 ## 🖥️ Local Camera Setup
 
