@@ -100,7 +100,7 @@ class DependencyChecker:
             package_lower = package_name.lower().replace('_', '-')
             
             # Handle special cases for built-in modules
-            if package_name in ['tkinter', 'sqlite3']:
+            if package_name in ['sqlite3']:
                 try:
                     importlib.import_module(package_name)
                     self.satisfied_packages.append({
@@ -215,7 +215,7 @@ class DependencyChecker:
         
         # Add missing packages
         for pkg in self.missing_packages:
-            if pkg['name'] not in ['tkinter', 'sqlite3']:  # Skip built-in modules
+            if pkg['name'] not in ['sqlite3']:  # Skip built-in modules
                 packages_to_install.append(pkg['original'])
         
         # Add outdated packages

@@ -33,7 +33,6 @@ class SystemComponent(Enum):
     CAMERA = "camera"
     DETECTION_ENGINE = "detection_engine"
     NOTIFICATION_SYSTEM = "notification_system"
-    GUI = "gui"
     PERFORMANCE_TRACKER = "performance_tracker"
 
 class ErrorRecoveryManager:
@@ -64,7 +63,6 @@ class ErrorRecoveryManager:
             SystemComponent.CAMERA: 3,
             SystemComponent.DETECTION_ENGINE: 2,
             SystemComponent.NOTIFICATION_SYSTEM: 3,
-            SystemComponent.GUI: 2,
             SystemComponent.PERFORMANCE_TRACKER: 5
         }
         
@@ -80,7 +78,6 @@ class ErrorRecoveryManager:
             SystemComponent.CAMERA: self._recover_camera,
             SystemComponent.DETECTION_ENGINE: self._recover_detection_engine,
             SystemComponent.NOTIFICATION_SYSTEM: self._recover_notification_system,
-            SystemComponent.GUI: self._recover_gui,
             SystemComponent.PERFORMANCE_TRACKER: self._recover_performance_tracker
         }
     
@@ -138,8 +135,6 @@ class ErrorRecoveryManager:
         # Check notification system health
         self._check_notification_system_health()
         
-        # Check GUI health
-        self._check_gui_health()
         
         # Check performance tracker health
         self._check_performance_tracker_health()
@@ -193,18 +188,6 @@ class ErrorRecoveryManager:
                 self._mark_component_unhealthy(SystemComponent.NOTIFICATION_SYSTEM, "Notification system not initialized")
         except Exception as e:
             self._mark_component_unhealthy(SystemComponent.NOTIFICATION_SYSTEM, f"Notification system error: {e}")
-    
-    def _check_gui_health(self):
-        """Check GUI health."""
-        try:
-            if self.main_system.gui:
-                # GUI is considered healthy if it exists
-                self._mark_component_healthy(SystemComponent.GUI)
-            else:
-                # GUI might not be initialized in headless mode
-                self._mark_component_healthy(SystemComponent.GUI)
-        except Exception as e:
-            self._mark_component_unhealthy(SystemComponent.GUI, f"GUI error: {e}")
     
     def _check_performance_tracker_health(self):
         """Check performance tracker health."""
@@ -365,17 +348,6 @@ class ErrorRecoveryManager:
             
         except Exception as e:
             logger.error(f"Notification system recovery failed: {e}")
-            return False
-    
-    def _recover_gui(self, error_message: str) -> bool:
-        """Recover GUI component."""
-        try:
-            logger.info("Attempting GUI recovery...")
-            # GUI recovery is complex and might require restart
-            return True  # Placeholder
-            
-        except Exception as e:
-            logger.error(f"GUI recovery failed: {e}")
             return False
     
     def _recover_performance_tracker(self, error_message: str) -> bool:

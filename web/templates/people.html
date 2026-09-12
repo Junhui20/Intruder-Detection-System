@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% block title %}People{% endblock %}{% block body %}
+<table>
+  <tr><th>Name</th><th>Photos</th><th></th></tr>
+  {% for r in rows %}
+  <tr>
+    <td>{{ r.name }}</td>
+    <td>{{ photo_count(r) }}</td>
+    <td><button hx-delete="/enrol/human/{{ r.id }}" hx-target="closest tr" hx-swap="outerHTML" hx-confirm="Forget {{ r.name }}?">forget</button></td>
+  </tr>
+  {% else %}<tr><td colspan="3" class="muted">Nobody enrolled — every person is an intruder.</td></tr>{% endfor %}
+</table>
+<form class="card" method="post" action="/enrol/human" enctype="multipart/form-data">
+  <label>Name <input name="name" required></label>
+  <label>Photos of their face <input type="file" name="photos" accept="image/*" multiple required></label>
+  <button>Enrol</button>
+</form>
+{% endblock %}

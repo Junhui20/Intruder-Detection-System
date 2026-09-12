@@ -27,8 +27,8 @@ This guide covers setting up IP cameras, local cameras, and troubleshooting came
 3. Note the **IP address** and **port** shown (e.g., `192.168.100.101:4747`)
 
 **Step 2: Configure in Detection System**
-1. Open the **IP Camera Manager** in the GUI
-2. Click **"Add Camera"**
+1. Open **Cameras** in the web UI
+2. Fill in the form (or paste the full URL)
 3. Enter camera details:
    ```
    Name: DroidCam Phone
@@ -79,8 +79,8 @@ Every mainstream IP camera (Tapo, Hikvision, Dahua, Reolink, Imou, Ezviz, Amcres
 anything ONVIF) speaks RTSP. It is the preferred protocol here: H.264 over TCP
 uses a fraction of MJPEG's bandwidth and the stream carries proper timestamps.
 
-**Add one:** IP Camera Manager → Add Camera → Protocol `RTSP`, port `554`,
-URL Suffix = the vendor path below → Test Connection → Save. Or paste the full
+**Add one:** web UI → Cameras → Protocol `RTSP`, host, path = the vendor path
+below → Add camera → test. Or paste the full
 URL straight into a `CameraConfig(url=...)`. Credentials go in the URL and are
 percent-encoded for you.
 
