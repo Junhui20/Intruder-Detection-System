@@ -1,574 +1,394 @@
 """
-Bidirectional Telegram Bot Notification System
+Telegram: alerts out, commands in.
 
-This module implements the Telegram bot integration with command listening
-and multi-user notification management as specified in requirements.
+Alerts go to every recipient on the Telegram page (per-user people/animal
+toggles, 20 s cooldown each). Recipients can talk back:
+
+    /status            what is running, who is enrolled, armed or not
+    /snapshot          the camera's current frame
+    /arm  /disarm      alerts on / off until further notice
+    /mute 1h           alerts off for a while (30m, 2h, 1h30m)
+    /enroll <name>     reply to an alert photo: that person or pet is family now
+
+The bot polls getUpdates on a thread; nobody outside the recipient list is
+answered. Nothing here needs a webhook or a public address.
 """
 
-import requests
-import time
-import json
-import threading
-from typing import Dict, List, Optional, Tuple
 import logging
+import math
 import os
-from datetime import datetime, timedelta
+import re
+import shutil
+import time
+import threading
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Union
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+import cv2
+import requests
+
 logger = logging.getLogger(__name__)
+
+HELP = (
+    "/status — what is running\n"
+    "/snapshot — current camera frame\n"
+    "/arm, /disarm — alerts on / off\n"
+    "/mute 1h — alerts off for a while\n"
+    "/enroll Name — reply to an alert photo to make them family"
+)
 
 
 class NotificationSystem:
     """
-    Advanced Telegram bot system with bidirectional communication.
-    
-    Features:
-    - Multi-user notification support
-    - Command listening (e.g., 'check' command)
-    - Individual user permissions
-    - Photo and message sending
-    - Notification cooldown management
-    - Error handling and retry logic
-    """
-    
-    def __init__(self, bot_token: str, db_manager=None):
-        """
-        Initialize the notification system.
+    The Telegram bot.
 
-        Args:
-            bot_token: Telegram bot token
-            db_manager: Database manager for notification history
-        """
-        self.bot_token = bot_token
+    Args:
+        bot_token: From BotFather; read from the environment by the caller.
+        db_manager: For /enroll.
+        system: The running IntruderDetectionSystem, for /status, /snapshot and
+            enrolment. None in tests.
+    """
+
+    def __init__(self, bot_token: str, db_manager=None, system=None):
         self.base_url = f"https://api.telegram.org/bot{bot_token}"
         self.db_manager = db_manager
-        self.users = {}  # Dictionary of user configurations
+        self.system = system
+        self.users: Dict[int, dict] = {}
         self.last_update_id = 0
         self.listening = False
         self.listen_thread = None
-        self.notification_cooldowns = {}  # Track cooldowns per user
-        self.default_cooldown = 20  # seconds
-
-        # Enhanced notification features
-        self.notification_history = []
-        self.max_history = 1000
-        self.rate_limit_window = 300  # 5 minutes
-        self.max_notifications_per_window = 10
-        self.last_notification_times = {}
-
-        # Notification templates
-        self.templates = {
-            'human_unknown': "🚨 Unknown person detected (confidence: {confidence}%)",
-            'human_known': "👋 {name} detected (confidence: {confidence}%)",
-            'animal_unknown': "🐾 Unknown {animal_type} detected (confidence: {confidence}%)",
-            'animal_known': "🐕 {name} detected (confidence: {confidence}%)",
-            'system_startup': "🚀 Intruder Detection System started",
-            'system_shutdown': "🛑 Intruder Detection System stopped",
-            'camera_offline': "📹 Camera {camera_id} went offline",
-            'camera_online': "📹 Camera {camera_id} is back online"
-        }
-
-        # Delivery confirmation tracking
-        self.pending_confirmations = {}
-
-        # Performance tracking
+        self.notification_cooldowns: Dict[int, float] = {}
+        self.default_cooldown = 20  # seconds between alerts per recipient
+        self.muted_until = 0.0  # epoch seconds; math.inf while disarmed
+        # (chat_id, message_id) -> what that alert photo showed, for /enroll
+        self.alerts: Dict[Tuple[int, int], dict] = {}
+        self.last_alert: Optional[float] = None
         self.notification_stats = {
-            'messages_sent': 0,
-            'photos_sent': 0,
-            'commands_received': 0,
-            'failed_sends': 0,
-            'active_users': 0,
-            'rate_limited': 0,
-            'template_usage': {}
+            "messages_sent": 0,
+            "photos_sent": 0,
+            "commands_received": 0,
+            "failed_sends": 0,
+            "active_users": 0,
         }
 
-        logger.info("Enhanced Notification System initialized")
-    
-    def load_users(self, users_data: List[Dict]):
-        """
-        Load user configurations from database.
-        
-        Args:
-            users_data: List of user configuration dictionaries
-        """
-        self.users = {}
-        
-        for user_data in users_data:
-            chat_id = user_data['chat_id']
-            self.users[chat_id] = {
-                'chat_id': chat_id,
-                'username': user_data['telegram_username'],
-                'notify_human_detection': user_data['notify_human_detection'],
-                'notify_animal_detection': user_data['notify_animal_detection'],
-                'sendstatus': user_data['sendstatus'],
-                'last_notification': user_data.get('last_notification')
+    # ── recipients ──────────────────────────────────────────────────────────
+
+    def load_users(self, users_data: List[Dict]) -> None:
+        """Replace the recipient list with notification_settings rows."""
+        self.users = {
+            u["chat_id"]: {
+                "chat_id": u["chat_id"],
+                "username": u["telegram_username"],
+                "notify_human_detection": u["notify_human_detection"],
+                "notify_animal_detection": u["notify_animal_detection"],
+                "sendstatus": u["sendstatus"],
             }
-        
-        self.notification_stats['active_users'] = len([u for u in self.users.values() if u['sendstatus'] == 'open'])
-        logger.info(f"Loaded {len(self.users)} users, {self.notification_stats['active_users']} active")
-    
-    def start_listening(self):
-        """Start listening for incoming messages in a separate thread."""
+            for u in users_data
+        }
+        self.notification_stats["active_users"] = sum(
+            u["sendstatus"] == "open" for u in self.users.values()
+        )
+        logger.info(
+            f"Telegram recipients: {self.notification_stats['active_users']} active"
+        )
+
+    # ── inbound ─────────────────────────────────────────────────────────────
+
+    def start_listening(self) -> None:
         if not self.listening:
             self.listening = True
-            self.listen_thread = threading.Thread(target=self._listen_for_messages, daemon=True)
+            self.listen_thread = threading.Thread(target=self._listen, daemon=True)
             self.listen_thread.start()
-            logger.info("Started listening for Telegram messages")
-    
-    def stop_listening(self):
-        """Stop listening for incoming messages."""
+
+    def stop_listening(self) -> None:
         self.listening = False
         if self.listen_thread:
             self.listen_thread.join(timeout=5)
-        logger.info("Stopped listening for Telegram messages")
-    
-    def _listen_for_messages(self):
-        """Listen for incoming messages and process commands."""
+
+    def _listen(self) -> None:
         while self.listening:
             try:
-                updates = self._get_updates()
-                
-                if updates and 'result' in updates:
-                    for update in updates['result']:
-                        self._process_update(update)
-                
-                time.sleep(1)  # Poll every second
-                
+                for update in self._get_updates():
+                    message = update.get("message")
+                    if not message or "text" not in message:  # edits, joins, stickers
+                        continue
+                    chat_id = message["chat"]["id"]
+                    user = self.users.get(chat_id)
+                    if not user or user["sendstatus"] != "open":
+                        logger.warning(
+                            f"Ignoring Telegram message from {chat_id}: not a recipient"
+                        )
+                        continue
+                    self.notification_stats["commands_received"] += 1
+                    try:
+                        self._command(chat_id, message)
+                    except Exception as e:  # one bad command must not eat the batch
+                        logger.exception("Telegram command failed")
+                        self.send_message(chat_id, f"⚠️ That failed: {e}")
+                time.sleep(1)
             except Exception as e:
-                logger.error(f"Error in message listening: {e}")
-                time.sleep(5)  # Wait longer on error
-    
-    def _get_updates(self) -> Optional[Dict]:
-        """Get updates from Telegram API."""
-        try:
-            url = f"{self.base_url}/getUpdates"
-            params = {
-                'offset': self.last_update_id + 1,
-                'timeout': 10,
-                'limit': 100
-            }
-            
-            response = requests.get(url, params=params, timeout=15)
-            
-            if response.status_code == 200:
-                data = response.json()
-                
-                if data['ok'] and data['result']:
-                    # Update last_update_id to mark messages as processed
-                    self.last_update_id = max(update['update_id'] for update in data['result'])
-                
-                return data
+                logger.error(f"Telegram listener: {e}")
+                time.sleep(5)
+
+    def _get_updates(self) -> List[Dict]:
+        params = {"offset": self.last_update_id + 1, "timeout": 10, "limit": 100}
+        reply = requests.get(
+            f"{self.base_url}/getUpdates", params=params, timeout=15
+        ).json()
+        updates = reply.get("result", []) if reply.get("ok") else []
+        if updates:
+            self.last_update_id = max(u["update_id"] for u in updates)
+        return updates
+
+    def _command(self, chat_id: int, message: Dict) -> None:
+        word, _, arg = message["text"].strip().partition(" ")
+        word = word.lower().lstrip("/").split("@")[0]
+        if word in ("status", "check"):
+            self.send_message(chat_id, self.status_text())
+        elif word == "snapshot":
+            frame = getattr(self.system, "latest_frame", None)
+            if frame is None:
+                self.send_message(chat_id, "No frame: detection is not running.")
             else:
-                logger.warning(f"Failed to get updates: {response.status_code}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Error getting updates: {e}")
-            return None
-    
-    def _process_update(self, update: Dict):
-        """Process a single update from Telegram."""
-        try:
-            if 'message' in update:
-                message = update['message']
-                chat_id = message['chat']['id']
-                
-                # Check if user is authorized
-                if chat_id not in self.users:
-                    logger.warning(f"Unauthorized user attempted to send message: {chat_id}")
-                    return
-                
-                user = self.users[chat_id]
-                if user['sendstatus'] != 'open':
-                    logger.info(f"Message from inactive user: {chat_id}")
-                    return
-                
-                # Process text messages
-                if 'text' in message:
-                    text = message['text'].strip().lower()
-                    self._process_command(chat_id, text)
-                    self.notification_stats['commands_received'] += 1
-                
-        except Exception as e:
-            logger.error(f"Error processing update: {e}")
-    
-    def _process_command(self, chat_id: int, command: str):
-        """Process commands from users."""
-        try:
-            if command == 'check':
-                # Manual photo capture command
-                logger.info(f"Manual check command received from {chat_id}")
-                # This will be handled by the main detection system
-                # For now, just acknowledge the command
-                self.send_message(chat_id, "📸 Manual check initiated. Taking photo...")
-                return True
-            elif command in ['status', '/status']:
-                # Status command
-                self.send_message(chat_id, "🟢 System is running and monitoring for intruders.")
-                return True
-            elif command in ['help', '/help', '/start']:
-                # Help command
-                help_text = """
-🤖 Intruder Detection Bot Commands:
-
-• `check` - Take manual photo and analyze
-• `status` - Check system status
-• `help` - Show this help message
-
-The bot will automatically notify you of:
-• Unknown human detections
-• Unfamiliar animal detections
-• System alerts
-
-Your notification settings can be managed through the main application.
-                """
-                self.send_message(chat_id, help_text)
-                return True
+                self.send_photo(
+                    chat_id, cv2.imencode(".jpg", frame)[1].tobytes(), "📷 now"
+                )
+        elif word == "arm":
+            self.muted_until = 0.0
+            self.send_message(chat_id, "🟢 Armed. Alerts are on.")
+        elif word == "disarm":
+            self.muted_until = math.inf
+            self.send_message(chat_id, "⚪ Disarmed. No alerts until /arm.")
+        elif word == "mute":
+            seconds = parse_duration(arg)
+            if seconds is None:
+                self.send_message(chat_id, "Usage: /mute 1h (also 30m, 1h30m)")
             else:
-                # Unknown command
-                self.send_message(chat_id, "❓ Unknown command. Type 'help' for available commands.")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Error processing command '{command}' from {chat_id}: {e}")
-            return False
-    
-    def send_notification(self, notification_type: str, message: str, 
-                         photo_path: Optional[str] = None, 
-                         force: bool = False) -> List[Tuple[int, int]]:
+                self.muted_until = time.time() + seconds
+                self.send_message(
+                    chat_id, f"🔇 Muted for {arg.strip()}. /arm to end early."
+                )
+        elif word in ("enroll", "enrol"):
+            self.send_message(chat_id, self._enroll(chat_id, message, arg.strip()))
+        else:
+            self.send_message(chat_id, HELP)
+
+    def status_text(self) -> str:
+        """One message: detection, cameras, roster, tier, armed state."""
+        s = self.system
+        if s is None:
+            return "🟢 Bot is up; detection system not attached."
+        cameras = len(getattr(s.camera_manager, "cameras", {}) or {})
+        people = (
+            len(set(s.face_recognition.known_face_names)) if s.face_recognition else 0
+        )
+        pets = len(s.animal_recognition.known_pets) if s.animal_recognition else 0
+        if self.muted_until == math.inf:
+            armed = "⚪ disarmed"
+        elif time.time() < self.muted_until:
+            armed = (
+                f"🔇 muted for {int((self.muted_until - time.time()) // 60)} more min"
+            )
+        else:
+            armed = "🟢 armed"
+        last = (
+            time.strftime("%H:%M", time.localtime(self.last_alert))
+            if self.last_alert
+            else "none yet"
+        )
+        return (
+            f"{'🟢 detecting' if s.detection_active else '🔴 detection stopped'} · "
+            f"{cameras} camera(s) · tier {s.settings.tier}\n"
+            f"{people} people, {pets} pets enrolled\n{armed} · last alert {last}"
+        )
+
+    def _enroll(self, chat_id: int, message: Dict, name: str) -> str:
+        """Make the subject of a replied-to alert photo a known person or pet."""
+        reply = message.get("reply_to_message") or {}
+        alert = self.alerts.get((chat_id, reply.get("message_id")))
+        if not alert:
+            return "Reply to one of my alert photos with /enroll Name."
+        if not name:
+            return "Give them a name: /enroll Name"
+        if self.system is None or not Path(alert["photo_path"]).exists():
+            return "That photo is gone; enrol from the web UI instead."
+        kind = alert["kind"]
+        folder = Path("data/faces" if kind == "human" else "data/animals")
+        folder.mkdir(parents=True, exist_ok=True)
+        slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+        path = folder / f"{slug}_{int(time.time())}.jpg"
+        if alert.get("bbox"):
+            x1, y1, x2, y2 = alert[
+                "bbox"
+            ]  # the models want the subject, not the driveway
+            pad = 20 if kind == "human" else 0  # the face detector likes some context
+            frame = cv2.imread(alert["photo_path"])
+            cv2.imwrite(
+                str(path),
+                frame[max(0, y1 - pad) : y2 + pad, max(0, x1 - pad) : x2 + pad],
+            )
+        else:
+            shutil.copy(alert["photo_path"], path)
+        entry_id = self.system.enrol(kind, name, [str(path)], alert.get("class_id"))
+        roster = (
+            self.system.face_recognition.known_face_names
+            if kind == "human"
+            else self.system.animal_recognition.known_pets
+        )
+        if name not in roster:
+            self.system.forget(entry_id)
+            what = "face" if kind == "human" else "usable animal"
+            return f"❌ Could not find a {what} in that photo; try a clearer alert or the web UI."
+        what = "person" if kind == "human" else alert.get("label", "pet")
+        return f"✅ {name} enrolled as a known {what}. Add more photos on the web UI for better matching."
+
+    # ── outbound ────────────────────────────────────────────────────────────
+
+    def send_notification(
+        self,
+        notification_type: str,
+        message: str,
+        photo_path: Optional[str] = None,
+        force: bool = False,
+        context: Optional[dict] = None,
+    ) -> List[Tuple[int, int]]:
         """
-        Send notification to all eligible users.
-        
+        Alert every eligible recipient.
+
         Args:
-            notification_type: 'human' or 'animal'
-            message: Notification message
-            photo_path: Optional path to photo to send
-            force: Skip cooldown check
-            
+            notification_type: 'human' or 'animal'; recipients opt in per type.
+            message: Caption or text.
+            photo_path: Sent as a photo when given and readable.
+            force: Ignore cooldown, mute and disarm (system messages).
+            context: What the photo shows (kind, bbox, class_id, label) — kept so
+                a recipient can reply /enroll to it.
+
         Returns:
-            (chat_id, message_id) for every message that went out — empty if none did
+            (chat_id, message_id) for every message that went out.
         """
+        if not force and time.time() < self.muted_until:
+            return []
         sent = []
-        
         for chat_id, user in self.users.items():
-            if user['sendstatus'] != 'open':
+            wanted = (
+                user[f"notify_{notification_type}_detection"]
+                if notification_type in ("human", "animal")
+                else True
+            )
+            if user["sendstatus"] != "open" or not wanted:
                 continue
-            
-            # Check notification preferences
-            if (notification_type == 'human' and not user['notify_human_detection']) or \
-               (notification_type == 'animal' and not user['notify_animal_detection']):
+            if (
+                not force
+                and time.time() - self.notification_cooldowns.get(chat_id, 0)
+                < self.default_cooldown
+            ):
                 continue
-            
-            # Check cooldown unless forced
-            if not force and self._is_in_cooldown(chat_id):
-                logger.debug(f"Skipping notification to {chat_id} due to cooldown")
-                continue
-            
             message_id = self._send_to_user(chat_id, message, photo_path)
             if message_id:
                 sent.append((chat_id, message_id))
-                self._update_cooldown(chat_id)
-        
+                self.notification_cooldowns[chat_id] = time.time()
+                if context and photo_path and os.path.exists(photo_path):
+                    self.alerts[(chat_id, message_id)] = {
+                        **context,
+                        "photo_path": photo_path,
+                    }
+        if sent:
+            self.last_alert = time.time()
+            for key in list(self.alerts)[:-200]:  # remember the last 200 alerts
+                self.alerts.pop(key, None)  # alerts run on parallel threads
         return sent
-    
-    def _send_to_user(self, chat_id: int, message: str, photo_path: Optional[str] = None) -> Optional[int]:
-        """Send message/photo to a specific user; returns the message_id."""
+
+    def _send_to_user(
+        self, chat_id: int, message: str, photo_path: Optional[str]
+    ) -> Optional[int]:
         try:
             if photo_path and os.path.exists(photo_path):
                 message_id = self.send_photo(chat_id, photo_path, message)
-                self.notification_stats['photos_sent' if message_id else 'failed_sends'] += 1
+                self.notification_stats[
+                    "photos_sent" if message_id else "failed_sends"
+                ] += 1
             else:
                 message_id = self.send_message(chat_id, message)
-                self.notification_stats['messages_sent' if message_id else 'failed_sends'] += 1
+                self.notification_stats[
+                    "messages_sent" if message_id else "failed_sends"
+                ] += 1
             return message_id
-            
         except Exception as e:
-            logger.error(f"Error sending to user {chat_id}: {e}")
-            self.notification_stats['failed_sends'] += 1
+            logger.error(f"Error sending to {chat_id}: {e}")
+            self.notification_stats["failed_sends"] += 1
             return None
-    
+
+    def _call(self, method: str, **kwargs) -> Optional[int]:
+        """POST one Bot API method; the new message's id, or None."""
+        try:
+            reply = requests.post(
+                f"{self.base_url}/{method}", timeout=30, **kwargs
+            ).json()
+            if not reply.get("ok"):
+                logger.warning(f"Telegram {method} refused: {reply.get('description')}")
+                return None
+            return (
+                reply["result"]["message_id"]
+                if isinstance(reply.get("result"), dict)
+                else True
+            )
+        except Exception as e:
+            logger.error(f"Telegram {method}: {e}")
+            return None
+
     def send_message(self, chat_id: int, message: str) -> Optional[int]:
-        """Send a text message; returns its Telegram message_id, or None."""
-        try:
-            url = f"{self.base_url}/sendMessage"
-            data = {
-                'chat_id': chat_id,
-                'text': message,
-                'parse_mode': 'Markdown'
-            }
-            
-            response = requests.post(url, data=data, timeout=10)
-            
-            if response.status_code == 200:
-                result = response.json()
-                if result['ok']:
-                    logger.debug(f"Message sent to {chat_id}")
-                    return result['result']['message_id']
-                else:
-                    logger.warning(f"Failed to send message to {chat_id}: {result}")
-                    return None
-            else:
-                logger.warning(f"HTTP error sending message to {chat_id}: {response.status_code}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Error sending message to {chat_id}: {e}")
-            return None
-    
-    def send_photo(self, chat_id: int, photo_path: str, caption: str = "") -> Optional[int]:
-        """Send a photo; returns its Telegram message_id, or None."""
-        try:
-            url = f"{self.base_url}/sendPhoto"
-            
-            with open(photo_path, 'rb') as photo:
-                files = {'photo': photo}
-                data = {
-                    'chat_id': chat_id,
-                    'caption': caption,
-                    'parse_mode': 'Markdown'
-                }
-                
-                response = requests.post(url, files=files, data=data, timeout=30)
-            
-            if response.status_code == 200:
-                result = response.json()
-                if result['ok']:
-                    logger.debug(f"Photo sent to {chat_id}")
-                    return result['result']['message_id']
-                else:
-                    logger.warning(f"Failed to send photo to {chat_id}: {result}")
-                    return None
-            else:
-                logger.warning(f"HTTP error sending photo to {chat_id}: {response.status_code}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Error sending photo to {chat_id}: {e}")
-            return None
-    
+        """Send text; returns its message_id."""
+        return self._call("sendMessage", data={"chat_id": chat_id, "text": message})
+
+    def send_photo(
+        self, chat_id: int, photo: Union[str, bytes], caption: str = ""
+    ) -> Optional[int]:
+        """Send a photo from a path or JPEG bytes; returns its message_id."""
+        data = {"chat_id": chat_id, "caption": caption}
+        if isinstance(photo, bytes):
+            return self._call(
+                "sendPhoto",
+                data=data,
+                files={"photo": ("frame.jpg", photo, "image/jpeg")},
+            )
+        with open(photo, "rb") as f:
+            return self._call("sendPhoto", data=data, files={"photo": f})
 
     def edit_caption(self, chat_id: int, message_id: int, caption: str) -> bool:
-        """Replace the caption under an already-sent photo."""
-        try:
-            data = {'chat_id': chat_id, 'message_id': message_id, 'caption': caption}  # plain text: VLM output has _ and *
-            result = requests.post(f"{self.base_url}/editMessageCaption", data=data, timeout=10).json()
-            if not result['ok']:
-                logger.warning(f"Caption edit refused for {chat_id}/{message_id}: {result.get('description')}")
-            return result['ok']
-        except Exception as e:
-            logger.error(f"Error editing caption for {chat_id}/{message_id}: {e}")
-            return False
-    
-    def _is_in_cooldown(self, chat_id: int) -> bool:
-        """Check if user is in notification cooldown."""
-        if chat_id not in self.notification_cooldowns:
-            return False
-        
-        last_notification = self.notification_cooldowns[chat_id]
-        return (time.time() - last_notification) < self.default_cooldown
-    
-    def _update_cooldown(self, chat_id: int):
-        """Update cooldown timestamp for user."""
-        self.notification_cooldowns[chat_id] = time.time()
-    
-    def test_connection(self) -> bool:
-        """Test bot connection and token validity."""
-        try:
-            url = f"{self.base_url}/getMe"
-            response = requests.get(url, timeout=10)
-            
-            if response.status_code == 200:
-                result = response.json()
-                if result['ok']:
-                    bot_info = result['result']
-                    logger.info(f"Bot connection successful: {bot_info['first_name']} (@{bot_info['username']})")
-                    return True
-                else:
-                    logger.error(f"Bot token invalid: {result}")
-                    return False
-            else:
-                logger.error(f"HTTP error testing bot: {response.status_code}")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Error testing bot connection: {e}")
-            return False
-    
-    def get_performance_stats(self) -> Dict:
-        """Get notification system performance statistics."""
-        return {
-            'messages_sent': self.notification_stats['messages_sent'],
-            'photos_sent': self.notification_stats['photos_sent'],
-            'commands_received': self.notification_stats['commands_received'],
-            'failed_sends': self.notification_stats['failed_sends'],
-            'active_users': self.notification_stats['active_users'],
-            'total_users': len(self.users),
-            'listening_status': self.listening,
-            'success_rate': (
-                (self.notification_stats['messages_sent'] + self.notification_stats['photos_sent']) /
-                max(1, self.notification_stats['messages_sent'] + self.notification_stats['photos_sent'] + self.notification_stats['failed_sends']) * 100
+        """Replace the caption under an already-sent photo (plain text — VLM output has _ and *)."""
+        return bool(
+            self._call(
+                "editMessageCaption",
+                data={"chat_id": chat_id, "message_id": message_id, "caption": caption},
             )
-        }
-    
-    def add_user(self, user_data: Dict) -> bool:
-        """Add a new user to the notification system."""
+        )
+
+    def test_connection(self) -> bool:
+        """True if the token answers getMe."""
         try:
-            chat_id = user_data['chat_id']
-            self.users[chat_id] = {
-                'chat_id': chat_id,
-                'username': user_data['telegram_username'],
-                'notify_human_detection': user_data.get('notify_human_detection', True),
-                'notify_animal_detection': user_data.get('notify_animal_detection', True),
-                'sendstatus': user_data.get('sendstatus', 'open'),
-                'last_notification': None
-            }
-            
-            # Update active users count
-            self.notification_stats['active_users'] = len([u for u in self.users.values() if u['sendstatus'] == 'open'])
-            
-            logger.info(f"Added user {chat_id} ({user_data['telegram_username']})")
-            return True
+            me = requests.get(f"{self.base_url}/getMe", timeout=10).json()
+            if me.get("ok"):
+                logger.info(f"Telegram bot: @{me['result'].get('username')}")
+            return bool(me.get("ok"))
         except Exception as e:
-            logger.error(f"Error adding user: {e}")
-            return False
-    
-    def remove_user(self, chat_id: int) -> bool:
-        """Remove a user from the notification system."""
-        if chat_id in self.users:
-            del self.users[chat_id]
-            if chat_id in self.notification_cooldowns:
-                del self.notification_cooldowns[chat_id]
-            
-            # Update active users count
-            self.notification_stats['active_users'] = len([u for u in self.users.values() if u['sendstatus'] == 'open'])
-            
-            logger.info(f"Removed user {chat_id}")
-            return True
-        return False
-
-    def send_templated_notification(self, template_key: str, **kwargs):
-        """Send a notification using a predefined template."""
-        try:
-            if template_key not in self.templates:
-                logger.error(f"Unknown template: {template_key}")
-                return False
-
-            # Format message using template
-            message = self.templates[template_key].format(**kwargs)
-
-            # Track template usage
-            if template_key not in self.notification_stats['template_usage']:
-                self.notification_stats['template_usage'][template_key] = 0
-            self.notification_stats['template_usage'][template_key] += 1
-
-            # Send to all eligible users
-            return self.send_notification_to_all(message)
-
-        except Exception as e:
-            logger.error(f"Error sending templated notification: {e}")
+            logger.error(f"Telegram getMe: {e}")
             return False
 
-    def send_notification_to_all(self, message: str, photo_path: str = None):
-        """Send notification to all active users with rate limiting."""
-        success_count = 0
-
-        for chat_id, user in self.users.items():
-            if user['sendstatus'] == 'open':
-                if self._check_rate_limit(chat_id):
-                    if photo_path:
-                        success = self.send_photo(chat_id, photo_path, message)
-                    else:
-                        success = self.send_message(chat_id, message)
-
-                    if success:
-                        success_count += 1
-                        self._log_notification(chat_id, message, photo_path)
-                else:
-                    logger.warning(f"Rate limit exceeded for user {chat_id}")
-                    self.notification_stats['rate_limited'] += 1
-
-        return success_count > 0
-
-    def _check_rate_limit(self, chat_id: int) -> bool:
-        """Check if user has exceeded rate limit."""
-        current_time = time.time()
-
-        if chat_id not in self.last_notification_times:
-            self.last_notification_times[chat_id] = []
-
-        # Remove old notifications outside the window
-        window_start = current_time - self.rate_limit_window
-        self.last_notification_times[chat_id] = [
-            t for t in self.last_notification_times[chat_id] if t > window_start
-        ]
-
-        # Check if under limit
-        if len(self.last_notification_times[chat_id]) < self.max_notifications_per_window:
-            self.last_notification_times[chat_id].append(current_time)
-            return True
-
-        return False
-
-    def _log_notification(self, chat_id: int, message: str, photo_path: str = None):
-        """Log notification to history."""
-        notification_record = {
-            'timestamp': time.time(),
-            'chat_id': chat_id,
-            'message': message,
-            'photo_path': photo_path,
-            'delivered': True
+    def get_performance_stats(self) -> Dict:
+        return {
+            **self.notification_stats,
+            "muted_until": self.muted_until,
+            "remembered_alerts": len(self.alerts),
         }
 
-        # Add to in-memory history
-        self.notification_history.append(notification_record)
 
-        # Trim history if too long
-        if len(self.notification_history) > self.max_history:
-            self.notification_history = self.notification_history[-self.max_history:]
-
-        # Log to database if available
-        if self.db_manager:
-            try:
-                # This would require a notification_history table
-                # For now, we'll just log it
-                logger.debug(f"Notification logged: {chat_id} - {message[:50]}...")
-            except Exception as e:
-                logger.error(f"Error logging notification to database: {e}")
-
-    def get_notification_history(self, limit: int = 50):
-        """Get recent notification history."""
-        return self.notification_history[-limit:] if self.notification_history else []
-
-    def get_notification_stats(self):
-        """Get comprehensive notification statistics."""
-        stats = self.notification_stats.copy()
-        stats['total_history_entries'] = len(self.notification_history)
-        stats['rate_limit_window'] = self.rate_limit_window
-        stats['max_per_window'] = self.max_notifications_per_window
-        return stats
-
-    def update_template(self, template_key: str, template_text: str):
-        """Update or add a notification template."""
-        self.templates[template_key] = template_text
-        logger.info(f"Updated template: {template_key}")
-
-    def get_templates(self):
-        """Get all available templates."""
-        return self.templates.copy()
-
-    def clear_rate_limits(self, chat_id: int = None):
-        """Clear rate limits for a user or all users."""
-        if chat_id:
-            if chat_id in self.last_notification_times:
-                del self.last_notification_times[chat_id]
-                logger.info(f"Cleared rate limits for user {chat_id}")
-        else:
-            self.last_notification_times.clear()
-            logger.info("Cleared all rate limits")
-
-    def set_rate_limit(self, window_seconds: int, max_notifications: int):
-        """Update rate limiting settings."""
-        self.rate_limit_window = window_seconds
-        self.max_notifications_per_window = max_notifications
-        logger.info(f"Updated rate limits: {max_notifications} per {window_seconds}s")
+def parse_duration(text: str) -> Optional[int]:
+    """'1h', '30m', '1h30m', '90' (minutes) → seconds; None if unreadable."""
+    text = text.strip().lower()
+    if text.isdigit():
+        return int(text) * 60
+    parts = re.fullmatch(r"(?:(\d+)h)?(?:(\d+)m)?", text)
+    if not text or not parts:
+        return None
+    hours, minutes = (int(x) if x else 0 for x in parts.groups())
+    return hours * 3600 + minutes * 60 or None

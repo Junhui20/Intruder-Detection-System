@@ -45,6 +45,24 @@ class FakeSystem(SimpleNamespace):
     def reload_camera_configurations(self):
         self.calls.append("reload_cameras")
 
+    def enrol(self, kind, name, photo_paths, class_id=None):
+        import json
+        from database.models import WhitelistEntry
+
+        entry_id = self.db_manager.create_whitelist_entry(WhitelistEntry(
+            name=name, entity_type=kind, image_path=photo_paths[0],
+            multiple_photos=json.dumps(photo_paths[1:]) if len(photo_paths) > 1 else None,
+            coco_class_id=class_id if kind == "animal" else None,
+            individual_id=name.lower() if kind == "animal" else None,
+        ))
+        (self.face_recognition.load_known_faces if kind == "human" else self.animal_recognition.load_known_pets)([])
+        return entry_id
+
+    def forget(self, entry_id):
+        entry = self.db_manager.get_whitelist_entry(entry_id)
+        Path(entry.image_path).unlink(missing_ok=True)
+        self.db_manager.delete_whitelist_entry(entry_id)
+
 
 class TestWebUI(unittest.TestCase):
     def setUp(self):

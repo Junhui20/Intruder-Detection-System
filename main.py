@@ -22,12 +22,14 @@ Version: 1.0.0
 import sys
 import os
 import argparse
+import json
 import re
 import signal
 import threading
 import time
 import warnings
 from typing import Optional, Any, Dict, List
+from pathlib import Path
 
 # Suppress known deprecation warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="pkg_resources")
@@ -42,6 +44,7 @@ from config.settings import Settings
 from config.detection_config import DetectionConfig
 from config.camera_config import CameraConfigManager
 from database.database_manager import DatabaseManager
+from database.models import WhitelistEntry
 from core.detection_engine import DetectionEngine
 from core.event_captions import TIER_MODELS as CAPTION_MODELS, EventCaptioner
 from core.face_recognition import TIER_MODELS as FACE_MODELS, FaceRecognitionSystem
@@ -301,7 +304,7 @@ class IntruderDetectionSystem:
                 logger.warning("No Telegram bot token configured")
                 return True
 
-            self.notification_system = NotificationSystem(bot_token, self.db_manager)
+            self.notification_system = NotificationSystem(bot_token, self.db_manager, system=self)
             if self.settings.captions_enabled:
                 try:  # a caption problem must never cost the alert channel
                     self.captioner = EventCaptioner(
@@ -566,7 +569,7 @@ class IntruderDetectionSystem:
                     if is_unknown:
                         photo_path, notification_sent = self._alert(
                             'human', f"🚨 Unknown person detected (confidence: {confidence:.1f}%)",
-                            frame, 'unknown_human', confidence, 'person',
+                            frame, 'unknown_human', confidence, 'person', bbox=bbox,
                         )
 
                     # Log detection to database
@@ -659,6 +662,7 @@ class IntruderDetectionSystem:
                             photo_path, notification_sent = self._alert(
                                 'animal', f"🐾 Unknown {animal_type} detected (confidence: {confidence:.1f}%)",
                                 frame, f'unknown_{animal_type}', confidence, animal_type,
+                                bbox=animal.get('bbox'), class_id=animal.get('class_id'),
                             )
 
                         # Log detection to database
@@ -720,7 +724,8 @@ class IntruderDetectionSystem:
         except Exception as e:
             logger.debug(f"Error cleaning up old sessions: {e}")
 
-    def _alert(self, kind: str, message: str, frame, label: str, confidence: float, subject: str):
+    def _alert(self, kind: str, message: str, frame, label: str, confidence: float, subject: str,
+               bbox=None, class_id=None):
         """
         Save the frame and notify Telegram; the VLM's one-liner is added under
         the photo once it is ready.
@@ -737,9 +742,11 @@ class IntruderDetectionSystem:
             return photo_path, False
         snapshot = frame.copy()
 
+        context = {"kind": kind, "label": subject, "bbox": bbox, "class_id": class_id}
+
         def send():
             try:
-                sent = self.notification_system.send_notification(kind, message, photo_path=photo_path)
+                sent = self.notification_system.send_notification(kind, message, photo_path=photo_path, context=context)
                 if not (sent and photo_path and self.captioner):
                     return
                 caption = self.captioner.describe(snapshot, subject)
@@ -790,6 +797,47 @@ class IntruderDetectionSystem:
         except Exception as e:
             logger.error(f"Error capturing detection screenshot: {e}")
             return None
+
+    def enrol(self, kind: str, name: str, photo_paths: List[str], class_id: Optional[int] = None):
+        """
+        Add a person (``human``) or pet (``animal``) to the whitelist and the live roster.
+
+        Args:
+            kind: 'human' or 'animal'.
+            name: Shown in alerts.
+            photo_paths: Saved photos; the first is the primary, the rest go in multiple_photos.
+            class_id: COCO class for a pet (16 dog, 15 cat); ignored for people.
+
+        Returns:
+            The new whitelist row id.
+        """
+        slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+        entry_id = self.db_manager.create_whitelist_entry(WhitelistEntry(
+            name=name, entity_type=kind, image_path=photo_paths[0],
+            multiple_photos=json.dumps(photo_paths[1:]) if len(photo_paths) > 1 else None,
+            coco_class_id=class_id if kind == "animal" else None,
+            individual_id=slug if kind == "animal" else None,
+        ))
+        self.reload_roster(kind)
+        return entry_id
+
+    def forget(self, entry_id: int) -> None:
+        """Remove a whitelist row, its photos, and its place in the live roster."""
+        entry = self.db_manager.get_whitelist_entry(entry_id)
+        if not entry:
+            return
+        for path in [entry.image_path] + (json.loads(entry.multiple_photos) if entry.multiple_photos else []):
+            Path(path).unlink(missing_ok=True)
+        self.db_manager.delete_whitelist_entry(entry_id)
+        self.reload_roster(entry.entity_type)
+
+    def reload_roster(self, kind: str) -> None:
+        """Re-read one kind of whitelist rows into the matching recogniser."""
+        rows = [e.to_dict() for e in self.db_manager.get_whitelist_entries(entity_type=kind)]
+        if kind == "human" and self.face_recognition:
+            self.face_recognition.load_known_faces(rows)
+        elif kind == "animal" and self.animal_recognition:
+            self.animal_recognition.load_known_pets(rows)
 
     def apply_tier(self, tier: str) -> None:
         """
