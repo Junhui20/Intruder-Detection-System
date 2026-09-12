@@ -108,6 +108,10 @@ class DatabaseManager:
             UPDATE system_config SET config_value = '0.45'
             WHERE config_key = 'human_confidence_threshold' AND config_value = '0.6'
         """)
+        conn.execute("""
+            UPDATE system_config SET config_value = '0.65'
+            WHERE config_key = 'pet_identification_threshold' AND config_value = '0.7'
+        """)
     
     def _create_indexes(self, conn: sqlite3.Connection):
         """Create database indexes for better performance."""

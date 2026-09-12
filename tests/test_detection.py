@@ -7,6 +7,7 @@ and animal recognition systems.
 """
 
 import unittest
+import tempfile
 import sys
 import os
 import numpy as np
@@ -152,63 +153,55 @@ class TestFaceRecognitionSystem(unittest.TestCase):
         self.assertEqual(gone["identity"], "Unknown")
 
 class TestAnimalRecognitionSystem(unittest.TestCase):
-    """Test cases for animal recognition system."""
-    
+    """Pet re-ID: an enrolled animal is named, any other is not."""
+
     @classmethod
     def setUpClass(cls):
-        """Set up test fixtures."""
-        cls.animal_recognition = AnimalRecognitionSystem()
-        
-        # Create test animal image
-        cls.test_animal_image = np.zeros((200, 200, 3), dtype=np.uint8)
-        cv2.circle(cls.test_animal_image, (100, 100), 50, (100, 100, 100), -1)
-    
-    def test_animal_recognition_initialization(self):
-        """Test animal recognition system initialization."""
-        self.assertIsNotNone(self.animal_recognition)
-    
+        cls.pets = AnimalRecognitionSystem(use_gpu=False)
+        if cls.pets.model is None:
+            raise unittest.SkipTest("transformers or the DINOv2 checkpoint unavailable")
+        from insightface.data import get_image
+
+        # Any two unrelated photos will do: the model does not care that they are people.
+        cls.jacky = get_image("t1")
+        cls.other = cv2.copyMakeBorder(get_image("Tom_Hanks_54745"), 56, 56, 56, 56, cv2.BORDER_REPLICATE)
+        cls.jacky_path = os.path.join(tempfile.mkdtemp(), "jacky.jpg")
+        cv2.imwrite(cls.jacky_path, cls.jacky)
+
+    def setUp(self):
+        self.pets.load_known_pets([])
+
+    def box(self, image, class_id=16):
+        h, w = image.shape[:2]
+        return [{"bbox": (0, 0, w, h), "class_id": class_id, "confidence": 0.9}]
+
     def test_identify_animals_with_no_detections(self):
-        """An empty detection list comes back empty."""
-        # `identify_animal(image, "dog")` never existed. The real method is
-        # identify_animals(frame, animal_detections) and it takes COCO class
-        # IDs, not species names — 16 is dog, 15 is cat.
-        empty_image = np.zeros((100, 100, 3), dtype=np.uint8)
-        results = self.animal_recognition.identify_animals(empty_image, [])
+        self.assertEqual(self.pets.identify_animals(self.jacky, []), [])
 
-        self.assertIsInstance(results, list)
-        self.assertEqual(len(results), 0)
+    def test_nobody_enrolled_still_annotates(self):
+        result = self.pets.identify_animals(self.jacky, self.box(self.jacky))[0]
+        self.assertEqual(result["bbox"], (0, 0, self.jacky.shape[1], self.jacky.shape[0]))
+        self.assertEqual(result["recognition_status"], "unknown_animal")
+        self.assertEqual(result["pet_identity"], "Unknown dog")
 
-    def test_identify_animals_annotates_each_detection(self):
-        """With no pets enrolled, a detection still comes back usable."""
-        detections = [{'bbox': (10, 10, 90, 90), 'class_id': 15, 'confidence': 0.8}]
-        results = self.animal_recognition.identify_animals(
-            self.test_animal_image, detections
-        )
+    def test_enrolled_pet_is_named_and_a_stranger_is_not(self):
+        self.pets.load_known_pets([{"name": "Jacky", "individual_id": None, "coco_class_id": 16,
+                                    "image_path": self.jacky_path, "multiple_photos": None}])
+        seen_again = self.pets.identify_animals(cv2.flip(self.jacky, 1), self.box(self.jacky))[0]
+        self.assertEqual(seen_again["pet_identity"], "Jacky")
+        self.assertGreater(seen_again["identification_confidence"], self.pets.pet_identification_threshold)
+        stranger = self.pets.identify_animals(self.other, self.box(self.other))[0]
+        self.assertEqual(stranger["recognition_status"], "unknown_animal")
 
-        self.assertIsInstance(results, list)
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0]['bbox'], (10, 10, 90, 90))
+    def test_a_cat_is_never_matched_against_an_enrolled_dog(self):
+        self.pets.add_known_pet("Jacky", 16, [self.jacky_path])
+        result = self.pets.identify_animals(self.jacky, self.box(self.jacky, class_id=15))[0]
+        self.assertEqual(result["pet_identity"], "Unknown cat")
 
-    def test_dominant_colour_is_a_name(self):
-        """Colour identification reports a colour name."""
-        # `extract_color_features()` never existed, and there is no histogram
-        # anywhere in this class. Colour matching works on a single dominant
-        # colour name, which is the 30% component of the hybrid pet score.
-        colour = self.animal_recognition._get_dominant_color(self.test_animal_image)
+    def test_unreadable_photo_enrols_nothing(self):
+        self.assertFalse(self.pets.add_known_pet("Ghost", 16, ["does_not_exist.jpg"]))
+        self.assertEqual(self.pets.known_pets, {})
 
-        self.assertIsInstance(colour, str)
-        self.assertTrue(colour)
-
-    def test_supported_animals(self):
-        """The COCO animal classes this system can identify."""
-        # `get_supported_animals()` never existed; the mapping is a public
-        # attribute, keyed by COCO class ID.
-        supported = self.animal_recognition.animal_classes
-
-        self.assertIsInstance(supported, dict)
-        self.assertGreater(len(supported), 0)
-        self.assertIn('dog', supported.values())
-        self.assertIn('cat', supported.values())
 
 class TestDetectionAccuracy(unittest.TestCase):
     """Test cases for detection accuracy and performance."""

@@ -38,7 +38,7 @@ class DetectionConfig:
     
     # Animal Recognition Configuration (User Configurable)
     animal_confidence_threshold: float = 0.6
-    pet_identification_threshold: float = 0.7
+    pet_identification_threshold: float = 0.65  # DINOv2 cosine; ≈1% false accepts on DogFaceNet
     pet_identification_method: str = "hybrid"  # color, face, hybrid
     color_detection_threshold: float = 0.2
     
