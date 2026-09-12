@@ -34,16 +34,20 @@ class EventCaptioner:
     Args:
         model: Ollama model name; must already be pulled (``scripts/setup_ollama.py``).
         host: Ollama server; the default is the one ``ollama serve`` binds.
-        timeout: Seconds to wait for a caption before giving up on it.
+        timeout: Seconds to wait for a caption before giving up on it (the photo is
+            already delivered; a late caption only delays the edit).
     """
 
     def __init__(
         self,
         model: str = "qwen2.5vl:3b",
         host: str = "http://localhost:11434",
-        timeout: float = 30,
+        timeout: float = 120,  # the 3b needs ~65 s on a 4-thread CPU; the photo is already out
+        options: Optional[dict] = None,
     ):
         self.model, self.host, self.timeout = model, host.rstrip("/"), timeout
+        # Ollama request options; bench.py adds num_gpu=0/num_thread=4 for the CPU tier
+        self.options = {"num_predict": 60, "temperature": 0.2, **(options or {})}
         self.enabled = self._model_is_served() and self._warm()
 
     def _model_is_served(self) -> bool:
@@ -72,7 +76,7 @@ class EventCaptioner:
         try:
             requests.post(
                 f"{self.host}/api/generate",
-                json={"model": self.model, "keep_alive": -1},
+                json={"model": self.model, "keep_alive": -1, "options": self.options},
                 timeout=120,
             ).raise_for_status()
             return True
@@ -106,7 +110,7 @@ class EventCaptioner:
                     "images": [base64.b64encode(jpeg.tobytes()).decode()],
                     "stream": False,
                     "keep_alive": -1,
-                    "options": {"num_predict": 60, "temperature": 0.2},
+                    "options": self.options,
                 },
                 timeout=self.timeout,
             )
