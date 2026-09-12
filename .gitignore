@@ -193,3 +193,6 @@ cython_debug/
 # `*.log` was already covered under the Django section by accident; the
 # directory itself was not, and the security test asks for it by name.
 logs/
+
+# Local planning scratch (handoffs, tickets) — never published
+.scratch/
