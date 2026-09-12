@@ -1,350 +1,159 @@
-# 🚀 Low Cost Intruder Detection System 2025
+# Everything Ring, Arlo and Google charge $100–200 a year for — familiar faces, AI event captions — running on your own hardware, zero subscription. Plus one thing they don't sell: recognising *your own* pet.
 
-## 📸 System Screenshots
+A local intruder-detection system for the home. A camera (an IP camera, an
+RTSP stream, or an old phone running DroidCam) feeds a YOLO detector; people and
+animals are matched against the faces and pets you enrolled; every alert goes
+to Telegram with a short caption written by a local vision-language model.
+Nothing leaves your LAN.
 
-![Real-time Detection](Images/Real_time.jpg)
-*Real-time intruder detection with live camera feed and AI-powered recognition*
+> **Status: mid-rework.** The original desktop (tkinter) version is tagged
+> [`v1-tkinter`](../../tree/v1-tkinter). `main` is being evolved in place — one
+> problem per commit — towards the design below. Sections marked *placeholder*
+> are filled in as their work lands; see [Roadmap](#roadmap).
 
-![Detection Dashboard](Images/Detection_page.jpg)
-*Comprehensive detection dashboard with system monitoring and controls*
+## Two tiers, two proofs
 
-## 📋 Project Overview
+The same features run in two model-size presets. **Low** proves that "local"
+does not require good hardware. **High** proves that scaling up does not raise
+the bill. Paid-tier features elsewhere — familiar faces, pet recognition, AI
+captions — are available in *both* tiers; only capacity (camera count, live-view
+protocol, retention) depends on the hardware.
 
-An advanced, low-budget intruder detection system providing real-time human and animal detection with intelligent face recognition capabilities for Windows 11.
+| | **Low** | **High** |
+|---|---|---|
+| Reference hardware | CPU-only, 4 threads *(proxy for a Pi 5 / N100 mini PC)* | 2020 gaming laptop, RTX 3050 4 GB |
+| Detector | YOLO11n *(vs YOLO26n — settled by benchmark)* | YOLO11n / YOLO26n |
+| Face recognition | InsightFace `buffalo_sc` | InsightFace `buffalo_l` |
+| Pet re-ID | DINOv2-small embeddings | DINOv2-base embeddings |
+| Event captions | Ollama `moondream` | Ollama `qwen2.5vl` |
+| Detection FPS (1 cam, 640 px) | *placeholder* | *placeholder* |
+| Face-ID latency | *placeholder* | *placeholder* |
+| Caption latency | *placeholder* | *placeholder* |
+| Pet re-ID latency | *placeholder* | *placeholder* |
+| RAM idle / under load | *placeholder* | *placeholder* |
+| Pi 5 / N100 (real numbers) | *contribute yours* | — |
 
-### **Core Features**
-- 🔍 **Human Detection**: YOLO11n for fast, accurate detection with person tracking
-- 🎭 **Face Recognition**: Single-threaded multi-face recognition with configurable confidence thresholds
-- 🐕 **Advanced Animal Recognition**: 8 animal types with color-based familiar pet identification
-- 📹 **IP Camera Support**: Full network camera management with HTTP/HTTPS protocols
-- 📱 **Bidirectional Telegram Bot**: Multi-user notifications with command listening
-- 🖥️ **Comprehensive GUI**: 5-module interface with real-time controls
-- 💾 **SQLite Database**: Lightweight storage with full CRUD operations
-- ⚡ **GPU Acceleration**: CUDA/TensorRT optimization
-- 📊 **Performance Monitoring**: Real-time metrics and resource utilization tracking
-- 🎯 **Smart Detection Logic**: Confidence thresholds and timer-based alerts
+Every number will ship with a reproducible `python bench.py --tier low|high`.
+Per-feature overrides live in `config.yaml`, so you can mix presets.
 
-### **System Requirements**
+## What it costs elsewhere
 
-#### **Minimum Hardware**
-- **GPU**: GTX 1060 6GB+ / RTX 3050
-- **CPU**: Intel i5-8400 / AMD Ryzen 5 3600
-- **RAM**: 8GB DDR4
-- **Storage**: 10GB free space
-- **OS**: Windows 11 (64-bit)
+| | Familiar faces | AI captions | Price (USD) | Price (MYR) |
+|---|---|---|---|---|
+| Google Home Premium | paid tier | yes | $10/mo or $100/yr; Advanced $200/yr | *placeholder* |
+| Arlo Secure | Plus tier | yes (Secure 6) | $7.99 single / $12.99 unlimited / Plus $17.99/mo | *placeholder* |
+| Ring Home Premium | yes | Video Descriptions, Premium only | $20/mo, $200/yr | *placeholder* |
+| Blue Iris | via add-on | via add-on | $69.95–$99.95 one-time (Windows NVR) | *placeholder* |
+| Frigate | yes (0.16+) | yes (0.15+) | free | free |
+| **This project** | yes | yes (local VLM) | **free** | **free** |
 
-#### **Recommended Hardware**
-- **GPU**: RTX 3060 12GB+ / RTX 4060
-- **CPU**: Intel i5-12400 / AMD Ryzen 5 5600X
-- **RAM**: 16GB DDR4
-- **Storage**: 20GB SSD
+USD prices verified September 2026. MYR column and local alternatives
+(Tapo Care, Imou, Ezviz) are *placeholder* pending research.
 
-## 📁 Clean Project Structure
+## Why not Frigate?
 
-```
-Intruder Detection System/
-├── 📄 README.md               # Project documentation
-├── 📄 main.py                 # Application entry point
-├── 📄 requirements.txt        # Python dependencies
-├── 📄 setup.py                # Package setup
-├── 📄 config.yaml             # Main configuration (no sensitive data)
-│
-├── 📁 core/                   # Core detection engines
-│   ├── detection_engine.py   # YOLO11n integration with person tracking
-│   ├── face_recognition.py   # Unified face recognition system
-│   ├── animal_recognition.py # Individual pet identification
-│   ├── camera_manager.py     # Camera handling and management
-│   ├── multi_camera_manager.py # Multi-camera coordination
-│   └── notification_system.py # Telegram bot integration
-│
-├── 📁 gui/                    # Modern GUI interface
-│   ├── main_window.py         # Main dashboard
-│   ├── detection_view.py      # Real-time detection display
-│   ├── ip_camera_manager.py   # Camera configuration GUI
-│   ├── entity_management.py   # Face/pet registration GUI
-│   ├── notification_center.py # Telegram management GUI
-│   └── performance_monitor.py # System metrics GUI
-│
-├── 📁 config/                 # Configuration management
-│   ├── settings.py            # System settings with env var support
-│   ├── env_config.py          # Secure environment configuration
-│   ├── camera_config.py       # Camera configurations
-│   └── detection_config.py    # Detection parameters
-│
-├── 📁 database/               # SQLite database layer
-│   ├── database_manager.py    # Database operations
-│   ├── models.py              # Database schemas
-│   ├── sqlite_schema.sql      # Database schema definition
-│   └── migrations/            # Schema migration scripts
-│
-├── 📁 utils/                  # Utilities and helpers
-│   ├── image_processing.py    # Image processing utilities
-│   ├── gpu_optimization.py    # CUDA/TensorRT optimization
-│   ├── performance_tracker.py # Performance monitoring
-│   └── logger.py              # Logging system
-│
-├── 📁 scripts/                # Setup and utility scripts
-│   ├── install.py             # Automated installation
-│   ├── setup_secure_config.py # Interactive secure setup
-│   ├── check_dependencies.py  # Dependency validation
-│   └── setup_environment.py   # Environment configuration
-│
-├── 📁 tests/                  # Comprehensive testing suite
-│   ├── test_detection.py      # Detection system tests
-│   ├── test_integration.py    # End-to-end integration tests
-│   ├── test_security.py       # Security and config tests
-│   └── run_tests.py           # Test orchestration
-│
-├── 📁 docs/                   # Complete documentation
-│   ├── INSTALLATION.md        # Setup instructions
-│   ├── SECURITY.md            # Security best practices
-│   ├── CHANGELOG.md           # Version history
-│   ├── DEVELOPMENT.md         # Development guide
-│   ├── CAMERA_SETUP.md        # Camera configuration
-│   └── TELEGRAM_SETUP.md      # Bot setup guide
-│
-├── 📁 models/                 # AI models and weights
-│   ├── yolo11n.pt             # YOLO11n model weights
-│   ├── yolo11n.onnx           # ONNX optimized model
-│   └── deploy.prototxt        # Face detection model config
-│
-├── 📁 data/                   # Data storage
-│   ├── faces/                 # Known face images
-│   ├── animals/               # Known pet images
-│   ├── detections/            # Detection results
-│   └── backups/               # Database backups
-│
-└── 📁 dependencies/           # External dependencies
-    └── dlib-19.24.99-cp312-cp312-win_amd64.whl
-```
+[Frigate](https://frigate.video) is free, excellent, and better than this
+project at being an NVR: 24/7 recording, timeline, Home Assistant, hardware
+accelerators. If you want an NVR, use Frigate. This project does not compete
+with it. It is a smaller, opinionated alert system with one feature Frigate
+does not have — recognising an individual pet rather than "a dog" — and a
+codebase small enough to read in an afternoon, which is the point of a
+portfolio piece.
 
-## 🚀 Quick Start
+## Features
 
-For complete installation instructions, see **[INSTALLATION.md](docs/INSTALLATION.md)**
+- **Detection** — YOLO11n, person tracking, 8 animal classes
+  (cat, dog, horse, sheep, cow, elephant, bear, zebra), configurable thresholds,
+  timer-based alerts for unknown people.
+- **Familiar faces** — enrol people from photos; alerts say who it was.
+- **Your own pet** — enrol a pet from photos; alerts distinguish *your* cat from
+  *a* cat. *(Planned: embedding-based re-ID replacing today's colour heuristic.)*
+- **Event captions** — a local vision-language model writes one line per alert
+  ("person in a red jacket at the side gate"). *(Planned, via Ollama; off
+  gracefully if Ollama is not running.)*
+- **Cameras** — IP cameras over HTTP/HTTPS, DroidCam (an old phone as a
+  camera), RTSP *(planned as first-class; works today via `custom_url`)*,
+  local webcam fallback, multi-camera.
+- **Telegram** — alerts with photo, per-user notification settings, bot
+  commands *(planned: `/status /snapshot /arm /disarm /mute 1h`, and
+  `/enroll <name>` by replying to an alert photo)*.
+- **Web UI** — enrolment, event history, MJPEG live view, camera management,
+  tier switch. *(Planned, FastAPI + htmx, replacing the tkinter desktop app.)*
+- **Storage** — SQLite, no server.
 
-### Quick Setup
-```bash
-# 1. Clone and install dependencies
-git clone <repository-url>
-cd intruder_detection_system
-python scripts/install.py
-
-# 2. Set up secure configuration (IMPORTANT)
-python scripts/setup_secure_config.py
-
-# 3. Run the system
-python main.py
-```
-
-**First time?** Follow the detailed **[Installation Guide](docs/INSTALLATION.md)** for dependency setup.
-
-**Security Note:** The system now uses environment variables for sensitive data like Telegram bot tokens. Never commit `.env` files to version control!
-
-## 📖 Documentation
-
-- **[Installation Guide](docs/INSTALLATION.md)** - Complete setup instructions
-- **[Security Guide](docs/SECURITY.md)** - Security best practices and environment variable setup
-- **[Development Guide](docs/DEVELOPMENT.md)** - Development workflow
-- **[API Documentation](docs/API.md)** - Code reference
-- **[Camera Setup Guide](docs/CAMERA_SETUP.md)** - IP camera configuration
-- **[Telegram Bot Setup](docs/TELEGRAM_SETUP.md)** - Bot configuration and user management
-- **[Database Migration](docs/DATABASE_MIGRATION.md)** - MariaDB to SQLite migration guide
-
-## 🖥️ **GUI Modules Overview**
-
-### **Main Dashboard**
-- **Real-time Video Feed**: Live camera stream with detection overlays
-- **System Status**: Connection status, performance metrics, active detections
-- **Quick Controls**: Manual photo capture, detection toggles, emergency alerts
-
-![Real-time Detection](Images/Real_time.jpg)
-*Real-time detection interface showing live camera feed with detection overlays*
-
-![Detection Page](Images/Detection_page.jpg)
-*Main detection dashboard with system controls and status monitoring*
-
-### **IP Camera Manager**
-- **Camera Configuration**: Protocol, IP address, port, URL suffix settings
-- **Connection Testing**: Real-time connectivity verification
-- **Status Management**: Enable/disable cameras, view connection history
-- **Fallback Settings**: Local camera configuration when network fails
-
-![IP Camera View](Images/IP_View_camera.jpg)
-*IP Camera management interface showing connected cameras*
-
-![IP Camera Add](Images/IP_Add_camera.jpg)
-*Adding new IP camera with configuration settings*
-
-![IP Camera Test](Images/IP_Test_camera.jpg)
-*Testing IP camera connectivity and configuration*
-
-### **Entity Management**
-- **Human Registration**: Face image upload, name assignment, ID management
-- **Animal Registration**: Pet photos, color selection, animal type classification
-- **Bulk Operations**: Import/export entity data, batch processing
-- **Image Validation**: Face detection verification, image quality checks
-
-![Human Management](Images/Human_page.jpg)
-*Human entity management interface for face registration and ID assignment*
-
-![Animal Management](Images/Aminal_page.jpg)
-*Animal entity management for pet registration and classification*
-
-![Bulk Operations](Images/Bulk_Operation.jpg)
-*Bulk operations interface for batch processing of entities*
-
-### **Notification Center**
-- **Telegram User Management**: Chat ID registration, username tracking
-- **Permission Settings**: Individual notification preferences per user
-- **Bot Configuration**: Token management, command setup, help system
-- **Test Functionality**: Send test messages, verify bot connectivity
-
-![Bot Configuration](Images/Bot_Config.jpg)
-*Telegram bot configuration interface with token management*
-
-![Notification Users](Images/Notification_User.jpg)
-*User management for Telegram notifications with permission settings*
-
-![Notification Test 1](Images/Notification_test.jpg)
-*Testing notification functionality - sending test messages*
-
-![Notification Test 2](Images/Notification_test2.jpg)
-*Notification test results and bot connectivity verification*
-
-### **Performance Monitor**
-- **Real-time Metrics**: FPS, processing times, resource utilization
-- **Detection Statistics**: Accuracy rates, false positive/negative tracking
-- **System Health**: Memory usage, GPU utilization, network status
-- **Historical Data**: Performance trends, optimization recommendations
-
-## 💾 **Database Schema (SQLite)**
-
-### **Core Tables**
-```sql
--- IP Camera devices
-CREATE TABLE devices (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ip_address TEXT NOT NULL,
-    port INTEGER NOT NULL,
-    use_https BOOLEAN DEFAULT FALSE,
-    end_with_video BOOLEAN DEFAULT FALSE,
-    status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive'))
-);
-
--- Known humans and animals with pet identification
-CREATE TABLE whitelist (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    entity_type TEXT NOT NULL CHECK(entity_type IN ('human', 'animal')),
-    familiar TEXT DEFAULT 'familiar' CHECK(familiar IN ('familiar', 'unfamiliar')),
-    color TEXT,
-    coco_class_id INTEGER,
-    image_path TEXT NOT NULL,
-    individual_id TEXT,                -- For specific pet identification (e.g., 'jacky')
-    pet_breed TEXT,                    -- Pet breed information
-    identification_method TEXT DEFAULT 'color' CHECK(identification_method IN ('color', 'face', 'hybrid'))
-);
-
--- Telegram notification settings
-CREATE TABLE notification_settings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    chat_id INTEGER NOT NULL UNIQUE,
-    telegram_username TEXT NOT NULL,
-    notify_human_detection BOOLEAN NOT NULL,
-    notify_animal_detection BOOLEAN NOT NULL,
-    sendstatus TEXT DEFAULT 'open' CHECK(sendstatus IN ('open', 'close'))
-);
-```
-
-## 🔧 Development
-
-### Prerequisites
-- Python 3.12+ — verified on 3.12 and 3.14 (2026-09-11)
-- NVIDIA GPU with CUDA support (optional; the system runs on CPU)
-- Git
-- SQLite 3.x
-
-Visual Studio Build Tools are no longer needed for a normal install. They were
-required by `face-recognition`, which builds dlib from source; that is now an
-optional backend in `requirements-optional.txt`, and face matching falls back
-to OpenCV without it.
+## Quick start
 
 ```bash
-pip install -r requirements.txt              # runtime
-pip install -r requirements-optional.txt     # dlib face encodings, MediaPipe
-pip install -r requirements-dev.txt          # tests and linting
+git clone https://github.com/Junhui20/Intruder-Detection-System.git
+cd Intruder-Detection-System
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+python scripts/setup_secure_config.py   # writes .env with your Telegram token
+python main.py                          # add --headless to run without the desktop UI
 ```
 
-### Development Setup
+Optional extras: `requirements-optional.txt` (dlib face encodings, MediaPipe),
+`requirements-dev.txt` (pytest, black, flake8). GPU users: `python
+scripts/install.py --gpu` installs the CUDA build of PyTorch.
+
+Python 3.12 and 3.14 are verified. **Linux and Windows** are supported; macOS is
+untested.
+
+## Security
+
+- Secrets (Telegram token) come from environment variables or `.env`, never
+  from `config.yaml`. See [docs/SECURITY.md](docs/SECURITY.md).
+- The web UI *(planned)* will refuse to start without `WEB_UI_PASSWORD` set,
+  and binds to the LAN only.
+- **Never port-forward this to the internet.** A camera system exposed to the
+  open internet is a public webcam with a login prompt. For remote access use
+  [Tailscale](https://tailscale.com) (or any WireGuard-style overlay): your
+  phone joins your LAN; nothing is exposed.
+
+## Documentation
+
+- [Installation](docs/INSTALLATION.md)
+- [Security](docs/SECURITY.md)
+- [Camera setup](docs/CAMERA_SETUP.md)
+- [Telegram bot setup](docs/TELEGRAM_SETUP.md)
+- [Development guide](docs/DEVELOPMENT.md) · [API reference](docs/API.md)
+- [Changelog](docs/CHANGELOG.md)
+
+## Development
+
 ```bash
-python -m venv venv
-venv\Scripts\activate
-python scripts/install.py --dev
-python scripts/migrate_database.py  # Set up SQLite database
+pip install -r requirements-dev.txt
+python -m pytest tests/ -q      # ~30 s; external-dependency tests are skipped when the dependency is absent
+black . && flake8
 ```
 
-## 🎯 **Key Features Detailed**
+Conventions are in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): PEP 8 at 88
+columns, absolute imports, Google-style docstrings, type hints on public
+methods.
 
-### **🔍 Advanced Human Detection**
-- **Multi-face Detection**: Simultaneous detection and recognition of multiple faces
-- **Person Tracking**: IoU-based tracking across frames
-- **Configurable Confidence**: User-adjustable confidence thresholds via software interface
-- **Identity Assignment**: Prevents duplicate identity assignments
-- **Timer-based Alerts**: 5-second unknown person detection
+## Roadmap
 
-### **🐕 Intelligent Animal Recognition**
-- **8 Animal Types**: cat, dog, horse, sheep, cow, elephant, bear, zebra
-- **Individual Pet Identification**: Recognize specific pets (e.g., "Jacky" the dog) using advanced face recognition
-- **Color Detection**: HSV-based analysis (white, black, yellow, brown, beige, gray)
-- **Familiar Pet Database**: Known animals with individual identification and color matching
-- **Smart Color Matching**: Similarity detection (yellow ≈ beige, brown ≈ beige)
-- **Configurable Confidence**: User-adjustable confidence thresholds for both detection and identification
+| | Ticket | Status |
+|---|---|---|
+| T1 | Cleanup + this README skeleton | done |
+| T2 | CI matrix: Ubuntu × Windows × Python 3.12/3.14 | |
+| T3 | RTSP first-class | |
+| T4 | InsightFace face backend (replaces LBPH) | |
+| T5 | Ollama event captions + setup script | |
+| T6–T7 | Pet re-ID: model choice, enrol → embed → match, PetFace eval | |
+| T8 | Web UI, delete tkinter | |
+| T9 | Telegram commands, `/enroll` from an alert photo | |
+| T10 | `bench.py` + both tiers' numbers | |
+| T11–T12 | MYR prices, final README with screenshots | |
 
-### **📹 IP Camera Management**
-- **Protocol Support**: HTTP and HTTPS connections
-- **Flexible Configuration**: Custom IP, port, and URL suffix settings
-- **Status Management**: Active/Inactive camera control
-- **Automatic Fallback**: Local camera (index 0) when network fails
-- **Connection Testing**: Built-in camera connectivity verification
+## Current desktop interface
 
-### **📱 Bidirectional Telegram Bot**
-- **Multi-user Support**: Individual chat IDs with custom permissions
-- **Command Listening**: Responds to "check" commands for manual capture
-- **Notification Types**: Separate settings for human/animal detection
-- **User Management**: Add/modify/delete users with status control
-- **Test Functionality**: Send test messages to verify setup
+Until the web UI lands the tkinter app is still the interface.
 
-### **📊 Real-time Performance Monitoring**
-- **Processing Metrics**: YOLO detection, face recognition, animal identification times
-- **Resource Tracking**: CPU, Memory, GPU utilization monitoring
-- **Frame Analysis**: Per-frame performance breakdown
-- **Research Metrics**: Accuracy, false positive/negative rates
+![Real-time detection](Images/Real_time.jpg)
 
-## 📊 Performance Targets
+![Entity management](Images/Human_page.jpg)
 
-| Component | Target Performance | Monitoring |
-|-----------|-------------------|------------|
-| Object Detection | 25-35 FPS (RTX 3050+) | Real-time FPS tracking |
-| Face Recognition | <100ms per face | Per-face timing |
-| Animal Recognition | <50ms per animal | Color analysis timing |
-| Memory Usage | <2GB VRAM | GPU utilization monitoring |
-| Startup Time | <30 seconds | System initialization tracking |
-| Notification Delay | <5 seconds | End-to-end latency measurement |
-| IP Camera Connection | <3 seconds | Network connectivity testing |
+## License
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-**Version**: 1.0.0  
-**Last Updated**: January 2025  
-**Platform**: Windows 11  
-**Author**: Development Team
+MIT — see [LICENSE](LICENSE).

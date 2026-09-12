@@ -26,7 +26,6 @@ Welcome to the Intruder Detection System documentation! This folder contains com
 ### Development & Technical
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development workflow and architecture
 - **[API.md](API.md)** - Code reference and API documentation
-- **[DATABASE_MIGRATION.md](DATABASE_MIGRATION.md)** - MariaDB to SQLite migration guide
 
 ### Project Information
 - **[CHANGELOG.md](CHANGELOG.md)** - Version history and changes
@@ -47,14 +46,12 @@ Welcome to the Intruder Detection System documentation! This folder contains com
 
 ### 🔧 **System Administrator**
 1. [SECURITY.md](SECURITY.md) - Security best practices
-2. [DATABASE_MIGRATION.md](DATABASE_MIGRATION.md) - Database management
-3. [INSTALLATION.md](INSTALLATION.md) - Deployment guide
-4. [DEVELOPMENT.md](DEVELOPMENT.md) - System architecture
+2. [INSTALLATION.md](INSTALLATION.md) - Deployment guide
+3. [DEVELOPMENT.md](DEVELOPMENT.md) - System architecture
 
 ### 🔄 **Migration from v1.x**
 1. [CHANGELOG.md](CHANGELOG.md) - What's changed in v2.0
 2. [SECURITY.md](SECURITY.md) - New security features
-3. [DATABASE_MIGRATION.md](DATABASE_MIGRATION.md) - Database migration
 
 ## 🔍 Quick Reference
 
@@ -114,6 +111,5 @@ For system problems:
 
 ---
 
-**Last Updated**: January 2025  
 **Version**: 2.0.0  
 **Total Documents**: 8 guides
