@@ -12,7 +12,7 @@ Features:
 - IP camera support with HTTP/HTTPS and local fallback
 - Bidirectional Telegram bot with command listening
 - SQLite database
-- Modern GUI with 5 specialized modules
+- Web UI (FastAPI + htmx) behind WEB_UI_PASSWORD
 - Real-time performance monitoring
 
 Author: Intruder Detection System Team
@@ -22,6 +22,7 @@ Version: 1.0.0
 import sys
 import os
 import argparse
+import re
 import signal
 import threading
 import time
@@ -47,7 +48,7 @@ from core.face_recognition import TIER_MODELS as FACE_MODELS, FaceRecognitionSys
 from core.animal_recognition import TIER_MODELS as PET_MODELS, AnimalRecognitionSystem
 from core.camera_manager import CameraManager
 from core.notification_system import NotificationSystem
-from gui.main_window import MainWindow
+from web.app import serve as serve_web
 from utils.performance_tracker import PerformanceTracker
 from utils.image_processing import ImageProcessor
 
@@ -101,7 +102,7 @@ class IntruderDetectionSystem:
         self.captioner: Optional[EventCaptioner] = None
         self.notification_system: Optional[NotificationSystem] = None
         self.performance_tracker: Optional[PerformanceTracker] = None
-        self.gui: Optional[MainWindow] = None
+        self.latest_frame = None  # newest annotated frame, for the web UI's MJPEG stream
         
         # Threading
         self.detection_thread: Optional[threading.Thread] = None
@@ -147,17 +148,6 @@ class IntruderDetectionSystem:
             if not self._initialize_performance_tracking():
                 return False
 
-            # FPS monitoring is handled by performance_tracker
-            # No separate FPS monitor needed
-            
-            # Initialize GUI
-            if not self._initialize_gui():
-                return False
-
-            # Set main system reference in GUI for database access
-            if self.gui:
-                self.gui.set_main_system(self)
-            
             logger.info("System initialization completed successfully")
             system_logger.log_startup("All components")
             return True
@@ -376,26 +366,6 @@ class IntruderDetectionSystem:
     #     """FPS monitoring is handled by performance_tracker."""
     #     return True
     
-    def _initialize_gui(self) -> bool:
-        """Initialize graphical user interface."""
-        try:
-            self.gui = MainWindow("Intruder Detection System")
-            
-            # Set up GUI callbacks
-            self.gui.set_callback('start_detection', self.start_detection)
-            self.gui.set_callback('stop_detection', self.stop_detection)
-            self.gui.set_callback('get_system_status', self.get_system_status)
-            self.gui.set_callback('get_performance_metrics', self.get_performance_metrics)
-            
-            logger.info("GUI initialized successfully")
-            return True
-            
-        except Exception as e:
-            logger.error(f"GUI initialization failed: {e}")
-            return False
-
-
-    
     def start_detection(self) -> bool:
         """Start the detection system."""
         try:
@@ -436,12 +406,7 @@ class IntruderDetectionSystem:
 
             if self.detection_thread:
                 self.detection_thread.join(timeout=5)
-
-            # Clear video feed in GUI
-            self._clear_gui_frame()
-
-            # Clear detection log in GUI
-            self._clear_gui_detection_log()
+            self.latest_frame = None
 
             logger.info("Detection system stopped")
             system_logger.log_shutdown("Detection system")
@@ -472,12 +437,9 @@ class IntruderDetectionSystem:
                 if self.performance_tracker:
                     self.performance_tracker.fps_tracker.update()
 
-                # Always update GUI with current frame for smooth video
-                annotated_frame = frame.copy()
-
                 # Skip processing for performance if configured
                 if frame_count % process_every_n_frames != 0:
-                    self._update_gui_frame(annotated_frame)
+                    self.latest_frame = frame
                     continue
 
                 # Perform object detection only on selected frames
@@ -502,11 +464,7 @@ class IntruderDetectionSystem:
                 # Handle notifications and alerts
                 self._process_detections(detections, frame)
 
-                # Create frame with detection overlays
-                annotated_frame = ImageProcessor.create_detection_overlay(frame, detections)
-
-                # Update GUI with annotated frame
-                self._update_gui_frame(annotated_frame)
+                self.latest_frame = ImageProcessor.create_detection_overlay(frame, detections)
 
                 # Adaptive delay based on FPS
                 if self.performance_tracker:
@@ -523,52 +481,6 @@ class IntruderDetectionSystem:
                 time.sleep(1)  # Wait longer on error
         
         logger.info("Detection loop ended")
-
-    def _update_gui_frame(self, frame):
-        """Update the GUI with the current frame."""
-        try:
-            if self.gui and hasattr(self.gui, 'modules') and 'detection' in self.gui.modules:
-                detection_view = self.gui.modules['detection']
-                if hasattr(detection_view, 'update_video_feed'):
-                    # Schedule GUI update in main thread
-                    self.gui.root.after(0, lambda: detection_view.update_video_feed(frame))
-        except Exception as e:
-            logger.debug(f"Error updating GUI frame: {e}")
-
-    def _clear_gui_frame(self):
-        """Clear the video feed in the GUI."""
-        try:
-            if self.gui and hasattr(self.gui, 'modules') and 'detection' in self.gui.modules:
-                detection_view = self.gui.modules['detection']
-                if hasattr(detection_view, 'clear_video_feed'):
-                    # Schedule GUI update in main thread
-                    self.gui.root.after(0, lambda: detection_view.clear_video_feed())
-        except Exception as e:
-            logger.debug(f"Error clearing GUI frame: {e}")
-
-    def _update_gui_detection_log(self, detection_type, name, confidence=None, additional_info=None):
-        """Update the detection log in the GUI."""
-        try:
-            if self.gui and hasattr(self.gui, 'modules') and 'detection' in self.gui.modules:
-                detection_view = self.gui.modules['detection']
-                if hasattr(detection_view, 'add_detection_log'):
-                    # Schedule GUI update in main thread
-                    self.gui.root.after(0, lambda: detection_view.add_detection_log(
-                        detection_type, name, confidence, additional_info
-                    ))
-        except Exception as e:
-            logger.debug(f"Error updating GUI detection log: {e}")
-
-    def _clear_gui_detection_log(self):
-        """Clear the detection log in the GUI."""
-        try:
-            if self.gui and hasattr(self.gui, 'modules') and 'detection' in self.gui.modules:
-                detection_view = self.gui.modules['detection']
-                if hasattr(detection_view, 'clear_detection_log'):
-                    # Schedule GUI update in main thread
-                    self.gui.root.after(0, lambda: detection_view.clear_detection_log())
-        except Exception as e:
-            logger.debug(f"Error clearing GUI detection log: {e}")
 
     def _get_grid_position(self, bbox, grid_size=100):
         """Get grid position for bbox to create stable detection IDs."""
@@ -664,6 +576,7 @@ class IntruderDetectionSystem:
                             entity_name=identity,
                             confidence=face_confidence / 100 if face_confidence > 0 else confidence / 100,
                             camera_id=None,  # Will be enhanced when camera management is improved
+                            image_path=photo_path,
                             notification_sent=notification_sent
                         )
 
@@ -675,13 +588,6 @@ class IntruderDetectionSystem:
                         human.get('bbox', (0, 0, 0, 0))
                     )
 
-                    # Update GUI log with percentage
-                    display_confidence = face_confidence if face_confidence > 0 else confidence
-                    self._update_gui_detection_log(
-                        'human',
-                        identity,
-                        display_confidence
-                    )
 
                 # Update last seen time for this session
                 self.last_detection_time[session_id] = current_time
@@ -723,12 +629,6 @@ class IntruderDetectionSystem:
                             animal.get('identification_method', 'unknown')
                         )
 
-                        # Update GUI log for known pet
-                        self._update_gui_detection_log(
-                            'animal',
-                            pet_identity,
-                            identification_confidence
-                        )
 
                     # Update last seen time
                     self.last_detection_time[session_id] = current_time
@@ -768,16 +668,10 @@ class IntruderDetectionSystem:
                                 entity_name=f"Unknown {animal_type}",
                                 confidence=confidence / 100,
                                 camera_id=None,  # Will be enhanced when camera management is improved
+                                image_path=photo_path,
                                 notification_sent=notification_sent
                             )
 
-                        # Update GUI log for unknown animal
-                        self._update_gui_detection_log(
-                            'animal',
-                            'Unknown',
-                            confidence,
-                            animal_type
-                        )
 
                     # Update last seen time
                     self.last_detection_time[session_id] = current_time
@@ -896,6 +790,30 @@ class IntruderDetectionSystem:
         except Exception as e:
             logger.error(f"Error capturing detection screenshot: {e}")
             return None
+
+    def apply_tier(self, tier: str) -> None:
+        """
+        Switch the model-size preset live and remember it in config.yaml.
+
+        Face, pet and caption models are rebuilt from the new tier; the
+        detection loop picks them up on its next frame.
+        """
+        previous, self.settings.tier = self.settings.tier, tier
+        if not self._initialize_detection_systems():
+            self.settings.tier = previous
+            logger.error(f"Tier {tier} not applied: its models failed to load; still on {previous}")
+            return
+        if self.captioner:
+            try:
+                self.captioner = EventCaptioner(
+                    self.settings.captions_model or CAPTION_MODELS[tier], self.settings.ollama_host
+                )
+            except Exception as e:
+                logger.warning(f"Event captions off after tier switch: {e}")
+        path = self.config_path
+        text = open(path).read()
+        updated = re.sub(r"^tier:.*$", f"tier: {tier}", text, count=1, flags=re.M)
+        open(path, "w").write(updated if updated != text else f"tier: {tier}\n{text}")
 
     def get_system_status(self) -> dict:
         """Get current system status."""
@@ -1153,15 +1071,10 @@ class IntruderDetectionSystem:
             signal.signal(signal.SIGTERM, self._signal_handler)
             
             logger.info("Starting Intruder Detection System...")
-            
-            if self.gui:
-                # Run GUI main loop
-                self.gui.run()
-            else:
-                # Run in headless mode
-                logger.info("Running in headless mode")
-                while self.running and not self.shutdown_event.is_set():
-                    time.sleep(1)
+            self.start_detection()
+            serve_web(self, self.settings.web_host, self.settings.web_port)  # no-op without WEB_UI_PASSWORD
+            while self.running and not self.shutdown_event.is_set():
+                time.sleep(1)
             
         except KeyboardInterrupt:
             logger.info("Received keyboard interrupt")
@@ -1197,10 +1110,6 @@ class IntruderDetectionSystem:
             # Release camera resources
             if self.camera_manager:
                 self.camera_manager.release_all_cameras()
-            
-            # Clean up GUI
-            if self.gui:
-                self.gui.cleanup()
             
             logger.info("System shutdown completed")
             system_logger.log_shutdown("IntruderDetectionSystem")
@@ -1273,7 +1182,6 @@ def main():
     parser = argparse.ArgumentParser(description="Intruder Detection System")
     parser.add_argument("--config", default="config.yaml", help="Configuration file path")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], help="Logging level")
-    parser.add_argument("--headless", action="store_true", help="Run without GUI")
     
     args = parser.parse_args()
     

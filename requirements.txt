@@ -27,6 +27,12 @@ transformers>=4.45,<5          # DINOv2 small / base from the Hugging Face hub
 torch>=2.6,<3
 torchvision>=0.21,<1
 
+# ── Web UI ─────────────────────────────────────────────────────────────────
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+jinja2>=3.1,<4
+python-multipart>=0.0.9,<1     # form uploads
+
 # ── Telegram bot ───────────────────────────────────────────────────────────
 python-telegram-bot>=21.0,<23
 requests>=2.32,<3

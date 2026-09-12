@@ -238,7 +238,6 @@ def configure_module_loggers() -> None:
     
     # Keep our modules at INFO level
     logging.getLogger("core").setLevel(logging.INFO)
-    logging.getLogger("gui").setLevel(logging.INFO)
     logging.getLogger("database").setLevel(logging.INFO)
     logging.getLogger("config").setLevel(logging.INFO)
     logging.getLogger("utils").setLevel(logging.INFO)

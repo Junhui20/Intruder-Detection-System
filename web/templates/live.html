@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block title %}Live{% endblock %}{% block body %}
+<p>
+  {% if detecting %}<img class="live" src="/stream" alt="live view">{% else %}<span class="muted">Detection is stopped.</span>{% endif %}
+</p>
+<form method="post" action="/detection" class="inline">
+  <input type="hidden" name="on" value="{{ 'false' if detecting else 'true' }}">
+  <button>{{ "Stop detection" if detecting else "Start detection" }}</button>
+</form>
+<span class="muted">
+  {% if cameras %}{{ cameras|length }} camera(s){% if active is not none %}, showing #{{ active }}{% endif %}{% else %}no cameras — <a href="/cameras">add one</a>{% endif %}
+</span>
+{% endblock %}

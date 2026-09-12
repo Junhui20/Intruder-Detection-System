@@ -45,17 +45,16 @@ core/
 └── performance_optimizer.py # System optimization
 ```
 
-### GUI Architecture
+### Web UI
 
 ```
-gui/
-├── main_window.py          # Main dashboard
-├── detection_view.py       # Real-time detection
-├── ip_camera_manager.py    # Camera configuration
-├── entity_management.py    # Human/animal registration
-├── notification_center.py  # Telegram user management
-└── performance_monitor.py  # System metrics
+web/
+├── app.py          # FastAPI routes, HTTP Basic auth, MJPEG stream
+├── templates/      # Jinja2 pages: live, events, people, pets, cameras, telegram
+└── static/         # htmx (vendored) and one stylesheet
 ```
+
+Starts only when `WEB_UI_PASSWORD` is set; see `web.serve()`.
 
 ### Database Layer
 

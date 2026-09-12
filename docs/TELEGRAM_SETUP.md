@@ -64,12 +64,7 @@ telegram:
   max_users: 10
 ```
 
-**Method 3: GUI Configuration**
-1. Open **Notification Center** in the GUI
-2. Click **"Bot Configuration"**
-3. Enter your bot token
-4. Click **"Test Connection"**
-5. Click **"Save"** if test succeeds
+The token is only ever read from the environment / `.env`; there is no form for it.
 
 ### Step 2: Get Your Chat ID
 
@@ -86,9 +81,9 @@ telegram:
 
 ## 👥 User Management
 
-### Adding Users via GUI
+### Adding Users via the web UI
 
-1. **Open Notification Center** in the main GUI
+1. Open **Telegram** in the web UI
 2. **Click "Add User"**
 3. **Enter user details:**
    ```
