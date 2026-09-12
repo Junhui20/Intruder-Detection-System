@@ -73,7 +73,7 @@ class TestDatabaseManager(unittest.TestCase):
             status="active"
         )
         
-        device_id = self.db_manager.add_device(device)
+        device_id = self.db_manager.create_device(device)
         self.assertIsNotNone(device_id)
         self.assertIsInstance(device_id, int)
     
@@ -88,7 +88,7 @@ class TestDatabaseManager(unittest.TestCase):
             status="active"
         )
         
-        device_id = self.db_manager.add_device(device)
+        device_id = self.db_manager.create_device(device)
         
         # Retrieve device
         retrieved_device = self.db_manager.get_device(device_id)
@@ -105,7 +105,7 @@ class TestDatabaseManager(unittest.TestCase):
             image_path="test/path.jpg"
         )
         
-        entry_id = self.db_manager.add_whitelist_entry(entry)
+        entry_id = self.db_manager.create_whitelist_entry(entry)
         self.assertIsNotNone(entry_id)
         self.assertIsInstance(entry_id, int)
     
@@ -119,7 +119,7 @@ class TestDatabaseManager(unittest.TestCase):
             sendstatus="open"
         )
         
-        settings_id = self.db_manager.add_notification_settings(settings)
+        settings_id = self.db_manager.create_notification_settings(settings)
         self.assertIsNotNone(settings_id)
         self.assertIsInstance(settings_id, int)
     

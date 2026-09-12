@@ -24,6 +24,7 @@ from core.detection_engine import DetectionEngine
 from core.face_recognition import FaceRecognitionSystem
 from core.animal_recognition import AnimalRecognitionSystem
 from database.database_manager import DatabaseManager
+from database.models import WhitelistEntry
 from config.settings import Settings
 from config.detection_config import DetectionConfig
 
@@ -107,7 +108,7 @@ class TestDetectionPipeline(IntegrationTestCase):
     
     def setUp(self):
         """Set up detection components."""
-        self.detection_engine = DetectionEngine(self.detection_config)
+        self.detection_engine = DetectionEngine.from_config(self.detection_config)
         self.face_recognition = FaceRecognitionSystem()
         self.animal_recognition = AnimalRecognitionSystem()
     
@@ -191,9 +192,14 @@ class TestDetectionPipeline(IntegrationTestCase):
         self.assertIn('humans', detection_results)
         self.assertIn('animals', detection_results)
         
-        # Verify processing metadata
-        self.assertIn('processing_time', detection_results)
+        # Verify processing metadata. `processing_time` is nested inside
+        # frame_info alongside the timestamp and model format — the test used
+        # to look for it at the top level, where it has never been.
         self.assertIn('frame_info', detection_results)
+        self.assertIn('processing_time', detection_results['frame_info'])
+        self.assertIsInstance(
+            detection_results['frame_info']['processing_time'], float
+        )
 
 
 class TestDatabaseIntegration(IntegrationTestCase):
@@ -212,46 +218,50 @@ class TestDatabaseIntegration(IntegrationTestCase):
         }
         
         # Log detection to database
+        # Keywords, because the positional order here was wrong on every
+        # argument: log_detection's first parameter is `detection_type`, so
+        # the camera id was being logged as the type, the type as the entity
+        # name, and so on. It also has no `bbox` parameter at all.
         success = self.db_manager.log_detection(
-            detection_data['camera_id'],
-            detection_data['detection_type'],
-            detection_data['confidence'],
-            detection_data['bbox'],
-            detection_data['image_path']
+            detection_type=detection_data['detection_type'],
+            entity_name='Test Person',
+            confidence=detection_data['confidence'],
+            image_path=detection_data['image_path'],
         )
-        
+
         self.assertTrue(success)
-        
-        # Verify detection was logged
-        detections = self.db_manager.get_recent_detections(limit=1)
-        self.assertEqual(len(detections), 1)
-        self.assertEqual(detections[0]['camera_id'], detection_data['camera_id'])
+
+        # And it can be read back as what it was logged as.
+        logged = self.db_manager.get_recent_detections(limit=1)
+        self.assertEqual(len(logged), 1)
+        self.assertEqual(logged[0].detection_type, 'human')
+        self.assertEqual(logged[0].entity_name, 'Test Person')
+        # DetectionLog is a dataclass, not a dict — the old assertion indexed
+        # it with ['camera_id'] and raised TypeError. camera_id is an int FK
+        # to devices, never the free-text 'test_camera' this test invented.
     
     def test_face_data_management(self):
-        """Test face data management in database."""
-        # Test adding known face
-        face_data = {
-            'name': 'Test Person',
-            'image_path': 'test_face.jpg',
-            'face_encodings': [0.1, 0.2, 0.3]  # Simplified encoding
-        }
-        
-        success = self.db_manager.add_known_face(
-            face_data['name'],
-            face_data['image_path'],
-            face_data['face_encodings']
+        """A known human is stored in the whitelist and read back."""
+        # `add_known_face` and `get_known_faces` never existed on
+        # DatabaseManager. Known people are whitelist rows with
+        # entity_type='human', and get_known_humans() reads them back.
+        entry = WhitelistEntry(
+            name='Test Person',
+            entity_type='human',
+            familiar='familiar',
+            image_path='test_face.jpg',
         )
-        
-        self.assertTrue(success)
-        
-        # Verify face was added
-        faces = self.db_manager.get_known_faces()
-        self.assertGreater(len(faces), 0)
-        
-        # Find our test face
-        test_face = next((f for f in faces if f['name'] == face_data['name']), None)
-        self.assertIsNotNone(test_face)
-        self.assertEqual(test_face['image_path'], face_data['image_path'])
+
+        entry_id = self.db_manager.create_whitelist_entry(entry)
+        self.assertIsInstance(entry_id, int)
+
+        humans = self.db_manager.get_known_humans()
+        self.assertGreater(len(humans), 0)
+
+        stored = next((h for h in humans if h.name == 'Test Person'), None)
+        self.assertIsNotNone(stored)
+        self.assertEqual(stored.image_path, 'test_face.jpg')
+        self.assertEqual(stored.entity_type, 'human')
 
 
 class TestSystemConfiguration(IntegrationTestCase):
