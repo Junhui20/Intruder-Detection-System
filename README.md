@@ -23,20 +23,34 @@ protocol, retention) depends on the hardware.
 
 | | **Low** | **High** |
 |---|---|---|
-| Reference hardware | CPU-only, 4 threads *(proxy for a Pi 5 / N100 mini PC)* | 2020 gaming laptop, RTX 3050 4 GB |
-| Detector | YOLO11n *(vs YOLO26n — settled by benchmark)* | YOLO11n / YOLO26n |
+| Reference hardware | same laptop, CPU only, 4 threads *(proxy for a Pi 5 / N100 mini PC)* | 2020 gaming laptop: i5-10500H, RTX 3050 4 GB |
+| Detector | YOLO11n | YOLO11n (fp16 ONNX) |
 | Face recognition | InsightFace `buffalo_sc` | InsightFace `buffalo_l` |
-| Pet re-ID | DINOv2-small embeddings | DINOv2-base embeddings |
+| Pet re-ID | `dinov2-small` | `dinov2-base` |
 | Event captions | Ollama `qwen2.5vl:3b` | Ollama `qwen2.5vl:7b` |
-| Detection FPS (1 cam, 640 px) | *placeholder* | *placeholder* |
-| Face-ID latency | *placeholder* | *placeholder* |
-| Caption latency | ~65 s (3b, CPU 4 threads) | 14 s (7b spills past 4 GB VRAM); 1.6 s with `captions.model: qwen2.5vl:3b` |
-| Pet re-ID latency (per animal crop) | 66 ms (CPU 4 threads) | 32 ms (base) · 10 ms with small |
-| RAM idle / under load | *placeholder* | *placeholder* |
+| Detection, 1 camera, 640 px | **31 FPS** (32 ms) | **117 FPS** (9 ms) |
+| Face-ID, one frame with 6 faces | 92 ms | 63 ms ¹ |
+| Pet re-ID, one animal crop | 53 ms | 24 ms |
+| Caption (photo goes out first; this is how late the caption arrives) | 76 s | 49 s ² |
+| RAM, models loaded / under load | 1.1 GB / 1.1 GB | 1.5 GB / 1.5 GB (+ 0.4 GB VRAM) |
 | Pi 5 / N100 (real numbers) | *contribute yours* | — |
 
-Every number will ship with a reproducible `python bench.py --tier low|high`.
-Per-feature overrides live in `config.yaml`, so you can mix presets.
+`python bench.py speed --tier low|high` reproduces every row (median of 30
+detections, 20 recognitions, 3 captions; a photo with six people). Per-feature
+overrides live in `config.yaml`, so you can mix presets.
+
+¹ `onnxruntime-gpu` did not bind CUDA in this environment (CUDA 13 libraries
+from torch, ORT 1.30 wants 12), so face-ID ran on the CPU in both tiers.
+² A 4 GB card is the problem here, not the model: with YOLO and DINOv2 already
+resident, Ollama gets ~2.5 GB and spills the 7b (and even the 3b — 43 s) to the
+CPU. Alone on the same card the 3b answers in 1.6 s. A ≥ 8 GB card is where the
+high tier's caption model belongs; on 4 GB set `captions.model: qwen2.5vl:3b`
+and accept ~40 s, or run captions on the CPU tier's budget.
+
+Two things the benchmark settled: **YOLO26n is not faster than YOLO11n** here
+(31 vs 31 FPS on the CPU, 104 vs 113 on the GPU), so the project stays on
+YOLO11n; and the "optimised" ONNX exports are **2× slower than the plain `.pt`
+on a CPU** (69–77 ms vs 34 ms), so they are now only used when a GPU is present.
 
 ## What it costs elsewhere
 
@@ -187,7 +201,7 @@ methods.
 | T6–T7 | Pet re-ID: model choice, enrol → embed → match, eval | done |
 | T8 | Web UI, delete tkinter | done |
 | T9 | Telegram commands, `/enroll` from an alert photo | done |
-| T10 | `bench.py` + both tiers' numbers | |
+| T10 | `bench.py` + both tiers' numbers | done |
 | T11–T12 | MYR prices, final README with screenshots | |
 
 ## License

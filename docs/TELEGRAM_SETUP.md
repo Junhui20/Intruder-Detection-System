@@ -182,10 +182,12 @@ photo gets a one-line description edited in under it a moment after it arrives:
 💬 A man in a dark hoodie crouching by the side gate.
 ```
 
-The photo is never delayed by the caption. Measured on a 2020 laptop: `qwen2.5vl:3b`
-1.6 s on the RTX 3050, 65 s on 4 CPU threads; `qwen2.5vl:7b` 14 s on the same
-4 GB card because only 3 of 29 layers fit (it wants ≥ 8 GB VRAM — on a 4 GB card
-set `captions.model: qwen2.5vl:3b`). The model stays loaded (3–6 GB RAM or VRAM)
+The photo is never delayed by the caption. Measured on a 2020 laptop with the
+detector and pet model already loaded (`bench.py speed`): `qwen2.5vl:3b` 76 s
+on 4 CPU threads; on the RTX 3050 4 GB both models spill to the CPU once YOLO and
+DINOv2 hold their share of VRAM — 7b 49 s, 3b 43 s. The 3b alone on that card
+answers in 1.6 s; a ≥ 8 GB card is where the 7b belongs. The caption request
+waits up to 120 s. The model stays loaded (3–6 GB RAM or VRAM)
 so an alert at 3 a.m. does not wait for a cold start. Nothing is sent anywhere but
 `localhost:11434`. Turn it off with `captions.enabled: false` in `config.yaml`.
 
