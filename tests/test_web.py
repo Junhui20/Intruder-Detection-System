@@ -165,6 +165,18 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class TestBotTokenComesFromTheEnvironment(unittest.TestCase):
+    def test_a_token_left_in_config_yaml_is_not_used(self):
+        import main as entry
+        from config.settings import Settings
+
+        system = entry.IntruderDetectionSystem("config.yaml")
+        system.settings = Settings()  # TELEGRAM_BOT_TOKEN unset -> ""
+        system.config_manager = mock.Mock(get=mock.Mock(return_value="123:leaked-in-yaml"))
+        self.assertTrue(system._initialize_notification_system())
+        self.assertIsNone(system.notification_system)
+
+
 class TestAlertPathStillWired(unittest.TestCase):
     """main.py's detection → session → screenshot path, run without cameras or models."""
 

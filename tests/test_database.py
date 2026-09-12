@@ -120,6 +120,25 @@ class TestDatabaseManager(unittest.TestCase):
         self.assertEqual([d.url for d in devices],
                          ["http://192.168.1.5:4747/video", "https://cam.local:443"])
 
+    def test_old_thresholds_are_rewritten_once_and_a_deliberate_value_survives(self):
+        os.unlink(self.temp_db.name)
+        conn = sqlite3.connect(self.temp_db.name)
+        with conn:
+            conn.executescript("""
+                CREATE TABLE system_config (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, config_key TEXT UNIQUE NOT NULL,
+                    config_value TEXT NOT NULL, config_type TEXT NOT NULL DEFAULT 'string'
+                        CHECK(config_type IN ('string', 'integer', 'float', 'boolean')),
+                    description TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+                INSERT INTO system_config (config_key, config_value, config_type)
+                VALUES ('human_confidence_threshold', '0.6', 'float');
+            """)
+        conn.close()
+        db = DatabaseManager(self.temp_db.name)
+        self.assertEqual(db.get_config("human_confidence_threshold").config_value, "0.45")
+        db.set_config("human_confidence_threshold", "0.6", "float")  # on purpose this time
+        self.assertEqual(DatabaseManager(self.temp_db.name).get_config("human_confidence_threshold").config_value, "0.6")
+
     def test_add_whitelist_entry(self):
         """Test adding a whitelist entry."""
         entry = WhitelistEntry(
