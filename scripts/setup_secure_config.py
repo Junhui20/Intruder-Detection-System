@@ -95,15 +95,11 @@ class SecureConfigSetup:
             # Update .env file with bot token
             self._update_env_file("TELEGRAM_BOT_TOKEN", bot_token)
             
-            # Optional: Get chat ID
-            print("\n💬 Optional: Telegram Chat ID")
-            print("If you want to restrict notifications to a specific chat,")
-            print("you can set a chat ID. Leave empty to allow all chats.")
-            chat_id = input("Enter Telegram Chat ID (optional): ").strip()
-            
-            if chat_id:
-                self._update_env_file("TELEGRAM_CHAT_ID", chat_id)
-            
+            print("\n🌐 Web UI password (any username; the UI stays off without one)")
+            password = getpass.getpass("Enter a web UI password (hidden, optional): ").strip()
+            if password:
+                self._update_env_file("WEB_UI_PASSWORD", password)
+
             return True
             
         except Exception as e:
