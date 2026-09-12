@@ -28,6 +28,7 @@ class Settings:
     # Model-size preset; per-feature overrides win over it
     tier: str = "low"  # low or high
     face_model: str = ""  # InsightFace pack; empty = TIER_MODELS[tier]
+    pet_model: str = ""  # DINOv2 checkpoint; empty = dinov2-small (low) / dinov2-base (high)
     captions_enabled: bool = True  # one-line VLM description on each alert photo
     captions_model: str = ""  # Ollama model; empty = qwen2.5vl:3b (low) / qwen2.5vl:7b (high)
     ollama_host: str = "http://localhost:11434"
@@ -37,7 +38,7 @@ class Settings:
     yolo_confidence: float = 0.5
     human_confidence_threshold: float = 0.45  # ArcFace cosine similarity
     animal_confidence_threshold: float = 0.6  # User configurable via GUI
-    pet_identification_threshold: float = 0.7  # For individual pet recognition
+    pet_identification_threshold: float = 0.65  # DINOv2 cosine; ≈1% false accepts on DogFaceNet
     
     # Face recognition settings
     multi_face_detection: bool = True

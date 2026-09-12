@@ -1,426 +1,218 @@
 """
-Individual Pet Identification System
+Individual pet re-identification on DINOv2 embeddings.
 
-This module implements the hybrid approach for individual pet recognition
-using face_recognition + YOLO + color identification as preferred by the user.
+YOLO says "a dog"; this module says "Jacky". Each enrolled photo becomes a
+DINOv2 embedding, an animal crop from the camera is matched by cosine
+similarity, and the best of a pet's photos decides. ``dinov2-small`` (low
+tier) or ``dinov2-base`` (high tier), both Apache-2.0, ~90 / ~350 MB, fetched
+from Hugging Face on first use.
+
+Measured on DogFaceNet (1393 dogs, aligned face crops), one enrolled pet
+against 300 strangers, three enrolment photos: small 92.6 % of the pet's
+photos recognised at 1 % false accepts (cosine ≥ 0.66); base 94.2 % (≥ 0.62).
+Those are web face crops, not doorway body crops — treat them as an upper
+bound. ``python bench.py pet-eval`` reproduces them.
 """
+
+import json
+import logging
+import os
+import time
+from typing import Dict, List, Optional
 
 import cv2
 import numpy as np
-import time
-from typing import Dict, List, Tuple, Optional
-import logging
-import pickle
-import os
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+try:
+    import torch
+    from transformers import AutoImageProcessor, AutoModel
+except ImportError:
+    AutoModel = None
+
 logger = logging.getLogger(__name__)
 
-# Optional backend (requirements-optional.txt). Without it the module still
-# imports, but individual pet identification cannot succeed: the colour-only
-# score tops out at 0.3 against a 0.49 threshold. A real re-identification
-# backend is planned to replace this.
-try:
-    import face_recognition
-
-    FACE_RECOGNITION_AVAILABLE = True
-except ImportError:
-    FACE_RECOGNITION_AVAILABLE = False
-    logger.warning(
-        "face_recognition not installed; individual pet identification is unavailable"
-    )
+TIER_MODELS = {"low": "facebook/dinov2-small", "high": "facebook/dinov2-base"}
+ANIMAL_CLASSES = {
+    15: "cat",
+    16: "dog",
+    17: "horse",
+    18: "sheep",
+    19: "cow",
+    20: "elephant",
+    21: "bear",
+    22: "zebra",
+}
 
 
 class AnimalRecognitionSystem:
     """
-    Advanced animal recognition system with individual pet identification.
-    
-    Features:
-    - Hybrid approach: face_recognition + color analysis
-    - Individual pet recognition (e.g., 'Jacky', 'Fluffy')
-    - Configurable confidence thresholds
-    - Color-based verification
-    - Support for 8 animal types from COCO dataset
+    Tells an enrolled pet apart from any other animal of its kind.
+
+    Args:
+        confidence_threshold: Minimum YOLO confidence for an animal box to be considered.
+        pet_identification_threshold: Minimum cosine similarity to name a pet.
+        model: Hugging Face id of the DINOv2 checkpoint.
+        use_gpu: Run on CUDA when available.
     """
-    
-    def __init__(self, confidence_threshold: float = 0.6, pet_identification_threshold: float = 0.7):
-        """
-        Initialize the animal recognition system.
-        
-        Args:
-            confidence_threshold: General animal detection confidence
-            pet_identification_threshold: Individual pet identification confidence
-        """
+
+    def __init__(
+        self,
+        confidence_threshold: float = 0.6,
+        pet_identification_threshold: float = 0.65,
+        model: str = "facebook/dinov2-small",
+        use_gpu: bool = True,
+    ):
         self.confidence_threshold = confidence_threshold
         self.pet_identification_threshold = pet_identification_threshold
-        self.known_pets = {}  # Dictionary storing pet data
-        
-        # COCO animal classes
-        self.animal_classes = {
-            15: 'cat', 16: 'dog', 17: 'horse', 18: 'sheep',
-            19: 'cow', 20: 'elephant', 21: 'bear', 22: 'zebra'
-        }
-        
-        # HSV color ranges for pet identification
-        self.color_ranges = {
-            'white': ([0, 0, 180], [180, 50, 255]),
-            'black': ([0, 0, 0], [180, 255, 50]),
-            'golden': ([15, 100, 100], [25, 255, 255]),
-            'brown': ([10, 100, 20], [20, 255, 200]),
-            'gray': ([0, 0, 50], [180, 50, 200]),
-            'beige': ([15, 30, 150], [40, 100, 255])
-        }
-        
-        # Color similarity mapping
-        self.color_similarities = {
-            'golden': ['yellow', 'brown', 'beige'],
-            'brown': ['golden', 'beige'],
-            'white': ['light_gray'],
-            'black': ['dark_gray'],
-            'beige': ['golden', 'brown']
-        }
-        
-        # Performance tracking
-        self.recognition_stats = {
-            'total_animals_processed': 0,
-            'successful_pet_identifications': 0,
-            'unknown_animals': 0,
-            'processing_times': [],
-            'color_matches': 0,
-            'face_matches': 0,
-            'hybrid_matches': 0
-        }
-        
-        logger.info("Animal Recognition System initialized")
-    
-    def load_known_pets(self, pets_data: List[Dict]):
+        self.model_name = model
+        self.known_pets: Dict[str, dict] = {}  # name -> {class_id, embeddings}
+        self.processing_times: List[float] = []
+        self.animals_processed = 0
+        self.pets_recognized = 0
+        self.model = None
+        if AutoModel is None:
+            logger.warning("transformers not installed; pet identification disabled")
+            return
+        try:
+            self.device = "cuda" if use_gpu and torch.cuda.is_available() else "cpu"
+            self.processor = AutoImageProcessor.from_pretrained(model)
+            self.model = AutoModel.from_pretrained(model).eval().to(self.device)
+            logger.info(f"Pet re-ID: {model} on {self.device}")
+        except Exception as e:
+            logger.error(f"Pet re-ID model {model} failed to load: {e}")
+
+    def embed(self, images: List[np.ndarray]) -> np.ndarray:
         """
-        Load known pets from database data.
-        
+        L2-normalised DINOv2 CLS embeddings of BGR crops, one row per image.
+
         Args:
-            pets_data: List of dictionaries containing pet information
+            images: Animal crops of any size.
+
+        Returns:
+            (n, dim) float32 array; rows have unit norm.
+        """
+        rows = []
+        for i in range(0, len(images), 32):  # batches of 32 fit a 4 GB card
+            rgb = [cv2.cvtColor(im, cv2.COLOR_BGR2RGB) for im in images[i : i + 32]]
+            pixels = self.processor(images=rgb, return_tensors="pt")["pixel_values"]
+            with torch.no_grad():
+                cls = self.model(pixel_values=pixels.to(self.device)).last_hidden_state[
+                    :, 0
+                ]
+            rows.append(torch.nn.functional.normalize(cls, dim=-1).cpu().numpy())
+        return np.concatenate(rows)
+
+    def add_known_pet(self, name: str, class_id: int, image_paths: List[str]) -> bool:
+        """
+        Enrol a pet from its photos. Three or more photos is what the eval assumed.
+
+        Args:
+            name: The pet's name as shown in alerts.
+            class_id: COCO class (15 cat, 16 dog, ...); only boxes of that class are compared.
+            image_paths: Photos of the pet, ideally cropped to the animal.
+
+        Returns:
+            True if at least one photo was readable.
+        """
+        images = [
+            im
+            for p in image_paths
+            if os.path.exists(p) and (im := cv2.imread(p)) is not None
+        ]
+        if class_id not in ANIMAL_CLASSES:
+            logger.warning(
+                f"{name} not enrolled: class {class_id!r} is not an animal YOLO reports"
+            )
+            return False
+        if not images or self.model is None:
+            logger.warning(f"No photos enrolled for {name}")
+            return False
+        self.known_pets[name] = {"class_id": class_id, "embeddings": self.embed(images)}
+        return True
+
+    def load_known_pets(self, pets_data: List[Dict]) -> None:
+        """
+        Replace the roster with whitelist rows (``name``/``individual_id``,
+        ``coco_class_id``, ``image_path``, optional JSON ``multiple_photos``).
         """
         self.known_pets = {}
-        
-        for pet_data in pets_data:
-            pet_name = pet_data['individual_id'] or pet_data['name']
-            
-            pet_info = {
-                'name': pet_data['name'],
-                'individual_id': pet_data['individual_id'],
-                'animal_class': pet_data['coco_class_id'],
-                'color': pet_data['color'],
-                'breed': pet_data.get('pet_breed', ''),
-                'identification_method': pet_data.get('identification_method', 'hybrid'),
-                'face_encodings': [],
-                'image_paths': [pet_data['image_path']]
-            }
-            
-            # Load additional photos if available
-            if 'multiple_photos' in pet_data and pet_data['multiple_photos']:
-                try:
-                    import json
-                    additional_photos = json.loads(pet_data['multiple_photos'])
-                    pet_info['image_paths'].extend(additional_photos)
-                except:
-                    pass
-            
-            # Load face encodings
-            if 'face_encodings' in pet_data and pet_data['face_encodings']:
-                try:
-                    pet_info['face_encodings'] = pickle.loads(pet_data['face_encodings'])
-                    logger.info(f"Loaded pre-computed encodings for {pet_name}")
-                except Exception as e:
-                    logger.warning(f"Failed to load encodings for {pet_name}: {e}")
-                    # Compute from images
-                    self._compute_pet_encodings(pet_info)
-            else:
-                # Compute face encodings from images
-                self._compute_pet_encodings(pet_info)
-            
-            self.known_pets[pet_name.lower()] = pet_info
-        
-        logger.info(f"Loaded {len(self.known_pets)} known pets")
-    
-    def _compute_pet_encodings(self, pet_info: Dict):
-        """Compute face encodings for a pet from its images."""
-        encodings = []
-
-        if not FACE_RECOGNITION_AVAILABLE:
-            pet_info['face_encodings'] = encodings
-            return
-
-        for image_path in pet_info['image_paths']:
+        for row in pets_data:
             try:
-                if os.path.exists(image_path):
-                    image = face_recognition.load_image_file(image_path)
-                    # face_recognition works surprisingly well on animal faces
-                    face_encodings = face_recognition.face_encodings(image)
-                    encodings.extend(face_encodings)
-            except Exception as e:
-                logger.warning(f"Error processing {image_path}: {e}")
-        
-        pet_info['face_encodings'] = encodings
-        logger.info(f"Computed {len(encodings)} face encodings for {pet_info['individual_id']}")
-    
-    def identify_animals(self, frame: np.ndarray, animal_detections: List[Dict]) -> List[Dict]:
-        """
-        Identify individual animals using hybrid approach.
-        
-        Args:
-            frame: Input image frame
-            animal_detections: List of animal detection dictionaries
-            
-        Returns:
-            Updated animal detections with identification results
-        """
-        start_time = time.time()
-        
-        if not animal_detections:
-            return animal_detections
-        
-        try:
-            for detection in animal_detections:
-                x1, y1, x2, y2 = detection['bbox']
-                animal_class = detection['class_id']
-                
-                # Extract animal region
-                animal_roi = frame[y1:y2, x1:x2]
-                
-                if animal_roi.size == 0:
-                    continue
-                
-                # Perform hybrid identification
-                identification_result = self._hybrid_pet_identification(animal_roi, animal_class)
-                
-                # Update detection with results
-                detection.update(identification_result)
-                self.recognition_stats['total_animals_processed'] += 1
-            
-            # Update performance statistics
-            processing_time = time.time() - start_time
-            self.recognition_stats['processing_times'].append(processing_time)
-            
-            # Keep only last 100 processing times
-            if len(self.recognition_stats['processing_times']) > 100:
-                self.recognition_stats['processing_times'] = self.recognition_stats['processing_times'][-100:]
-            
-            return animal_detections
-            
-        except Exception as e:
-            logger.error(f"Animal identification failed: {e}")
-            # Return original detections with error status
-            for detection in animal_detections:
-                detection['pet_identity'] = 'Recognition Error'
-                detection['identification_confidence'] = 0.0
-                detection['identification_method'] = 'error'
-            return animal_detections
-    
-    def _hybrid_pet_identification(self, animal_image: np.ndarray, animal_class: int) -> Dict:
-        """
-        Perform hybrid pet identification using face + color analysis.
-        
-        Args:
-            animal_image: Cropped animal image
-            animal_class: COCO class ID of the animal
-            
-        Returns:
-            Dictionary with identification results
-        """
-        # Get dominant color
-        detected_color = self._get_dominant_color(animal_image)
-        
-        # Try face recognition first
-        face_results = self._recognize_pet_face(animal_image, animal_class)
-        
-        # Hybrid scoring
-        best_match = None
-        best_score = 0
-        identification_method = 'unknown'
-        
-        for pet_name, pet_data in self.known_pets.items():
-            if pet_data['animal_class'] == animal_class:
-                score = 0
-                method_used = []
-                
-                # Face recognition score (70% weight)
-                if face_results and pet_name in face_results:
-                    face_confidence = face_results[pet_name]
-                    score += face_confidence * 0.7
-                    method_used.append('face')
-                    self.recognition_stats['face_matches'] += 1
-                
-                # Color matching score (30% weight)
-                if self._is_color_match(pet_data['color'], detected_color):
-                    score += 0.3
-                    method_used.append('color')
-                    self.recognition_stats['color_matches'] += 1
-                elif self._is_color_similar(pet_data['color'], detected_color):
-                    score += 0.15
-                    method_used.append('color_similar')
-                
-                # Check if this is the best match
-                if score > best_score and score > (self.pet_identification_threshold * 0.7):  # Adjusted threshold
-                    best_score = score
-                    best_match = pet_name
-                    identification_method = '+'.join(method_used) if method_used else 'unknown'
-        
-        # Prepare result
-        if best_match:
-            pet_data = self.known_pets[best_match]
-            result = {
-                'pet_identity': pet_data['individual_id'] or pet_data['name'],
-                'pet_name': pet_data['name'],
-                'pet_breed': pet_data['breed'],
-                'identification_confidence': best_score,
-                'identification_method': identification_method,
-                'detected_color': detected_color,
-                'recognition_status': 'known_pet'
-            }
-            self.recognition_stats['successful_pet_identifications'] += 1
-            
-            if 'face' in identification_method and 'color' in identification_method:
-                self.recognition_stats['hybrid_matches'] += 1
-        else:
-            animal_type = self.animal_classes.get(animal_class, 'unknown')
-            result = {
-                'pet_identity': f'Unknown {animal_type}',
-                'pet_name': f'Unknown {animal_type}',
-                'pet_breed': '',
-                'identification_confidence': 0.0,
-                'identification_method': 'none',
-                'detected_color': detected_color,
-                'recognition_status': 'unknown_animal'
-            }
-            self.recognition_stats['unknown_animals'] += 1
-        
-        return result
-    
-    def _recognize_pet_face(self, animal_image: np.ndarray, animal_class: int) -> Optional[Dict]:
-        """Use face_recognition library for pet face identification."""
-        if not FACE_RECOGNITION_AVAILABLE:
-            return None
+                extra = json.loads(row.get("multiple_photos") or "[]")
+            except ValueError:
+                extra = []  # a bad row loses its extra photos, not the whole roster
+            self.add_known_pet(
+                row.get("individual_id") or row["name"],
+                row["coco_class_id"],
+                [row["image_path"]] + extra,
+            )
+        logger.info(f"Enrolled {len(self.known_pets)} pet(s)")
 
-        try:
-            # face_recognition works surprisingly well on animal faces
-            face_encodings = face_recognition.face_encodings(animal_image)
-            
-            if face_encodings:
-                results = {}
-                for pet_name, pet_data in self.known_pets.items():
-                    if (pet_data['animal_class'] == animal_class and 
-                        pet_data['face_encodings']):
-                        
-                        # Compare with stored pet face encodings
-                        distances = face_recognition.face_distance(
-                            pet_data['face_encodings'],
-                            face_encodings[0]
-                        )
-                        
-                        if len(distances) > 0:
-                            confidence = 1 - min(distances)
-                            if confidence > 0.4:  # Lower threshold for animals
-                                results[pet_name] = confidence
-                
-                return results if results else None
-        except Exception as e:
-            logger.debug(f"Face recognition failed: {e}")
-        
-        return None
-    
-    def _get_dominant_color(self, image: np.ndarray) -> str:
-        """HSV-based color detection."""
-        try:
-            hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-            
-            color_counts = {}
-            total_pixels = image.shape[0] * image.shape[1]
-            
-            for color, (lower, upper) in self.color_ranges.items():
-                mask = cv2.inRange(hsv_image, np.array(lower), np.array(upper))
-                color_counts[color] = np.count_nonzero(mask) / total_pixels
-            
-            dominant_color = max(color_counts, key=color_counts.get)
-            max_ratio = color_counts[dominant_color]
-            
-            return dominant_color if max_ratio > 0.2 else 'unknown'
-        except Exception as e:
-            logger.debug(f"Color detection failed: {e}")
-            return 'unknown'
-    
-    def _is_color_match(self, expected_color: str, detected_color: str) -> bool:
-        """Check for exact color match."""
-        return expected_color.lower() == detected_color.lower()
-    
-    def _is_color_similar(self, expected_color: str, detected_color: str) -> bool:
-        """Check if colors are similar."""
-        similarities = self.color_similarities.get(expected_color.lower(), [])
-        return detected_color.lower() in similarities
-    
-    def add_known_pet(self, pet_data: Dict) -> bool:
+    def identify_animals(
+        self, frame: np.ndarray, animal_detections: List[Dict]
+    ) -> List[Dict]:
         """
-        Add a new known pet to the system.
-        
+        Annotate animal detections with ``pet_identity``, ``identification_confidence``
+        and ``recognition_status`` (``known_pet`` / ``unknown_animal``).
+
         Args:
-            pet_data: Dictionary containing pet information
-            
+            frame: BGR frame the detections came from.
+            animal_detections: Dicts with ``bbox`` and ``class_id`` from the detector.
+
         Returns:
-            True if successful, False otherwise
+            The same list, annotated in place.
         """
-        try:
-            pet_name = pet_data['individual_id'] or pet_data['name']
-            
-            # Compute face encodings
-            pet_info = {
-                'name': pet_data['name'],
-                'individual_id': pet_data['individual_id'],
-                'animal_class': pet_data['coco_class_id'],
-                'color': pet_data['color'],
-                'breed': pet_data.get('pet_breed', ''),
-                'identification_method': pet_data.get('identification_method', 'hybrid'),
-                'face_encodings': [],
-                'image_paths': [pet_data['image_path']]
+        start = time.time()
+        for det in animal_detections:
+            x1, y1, x2, y2 = det["bbox"]
+            crop = frame[max(0, y1) : y2, max(0, x1) : x2]
+            name, score = None, 0.0
+            candidates = {
+                n: p
+                for n, p in self.known_pets.items()
+                if p["class_id"] == det["class_id"]
             }
-            
-            self._compute_pet_encodings(pet_info)
-            self.known_pets[pet_name.lower()] = pet_info
-            
-            logger.info(f"Added known pet: {pet_name}")
-            return True
-        except Exception as e:
-            logger.error(f"Error adding pet: {e}")
-            return False
-    
-    def update_confidence_thresholds(self, general_threshold: float = None, 
-                                   pet_threshold: float = None):
-        """Update confidence thresholds."""
-        if general_threshold is not None and 0.0 <= general_threshold <= 1.0:
+            if candidates and crop.size:
+                try:
+                    query = self.embed([crop])[0]
+                except Exception as e:  # one bad crop must not cost the frame
+                    logger.warning(f"Pet embedding failed: {e}")
+                    candidates = {}
+                for n, pet in candidates.items():
+                    sim = float((pet["embeddings"] @ query).max())
+                    if sim >= self.pet_identification_threshold and sim > score:
+                        name, score = n, sim
+            self.animals_processed += 1
+            self.pets_recognized += bool(name)
+            det.update(
+                pet_identity=name
+                or f"Unknown {ANIMAL_CLASSES.get(det['class_id'], 'animal')}",
+                identification_confidence=score,
+                recognition_status="known_pet" if name else "unknown_animal",
+            )
+        self.processing_times = (self.processing_times + [time.time() - start])[-100:]
+        return animal_detections
+
+    def update_confidence_thresholds(
+        self,
+        general_threshold: Optional[float] = None,
+        pet_threshold: Optional[float] = None,
+    ) -> None:
+        """Set either threshold (0–1); None leaves it alone."""
+        if general_threshold is not None and 0 <= general_threshold <= 1:
             self.confidence_threshold = general_threshold
-            logger.info(f"Animal confidence threshold updated to {general_threshold}")
-        
-        if pet_threshold is not None and 0.0 <= pet_threshold <= 1.0:
+        if pet_threshold is not None and 0 <= pet_threshold <= 1:
             self.pet_identification_threshold = pet_threshold
-            logger.info(f"Pet identification threshold updated to {pet_threshold}")
-    
+
     def get_performance_stats(self) -> Dict:
-        """Get animal recognition performance statistics."""
-        if not self.recognition_stats['processing_times']:
-            return {'error': 'No processing data available'}
-        
-        processing_times = self.recognition_stats['processing_times']
-        total_processed = self.recognition_stats['total_animals_processed']
-        
+        """Counters and timing for the monitoring UI."""
         return {
-            'total_animals_processed': total_processed,
-            'successful_pet_identifications': self.recognition_stats['successful_pet_identifications'],
-            'unknown_animals': self.recognition_stats['unknown_animals'],
-            'identification_accuracy': (self.recognition_stats['successful_pet_identifications'] / total_processed * 100) if total_processed > 0 else 0,
-            'color_matches': self.recognition_stats['color_matches'],
-            'face_matches': self.recognition_stats['face_matches'],
-            'hybrid_matches': self.recognition_stats['hybrid_matches'],
-            'avg_processing_time': np.mean(processing_times),
-            'confidence_threshold': self.confidence_threshold,
-            'pet_identification_threshold': self.pet_identification_threshold,
-            'known_pets_count': len(self.known_pets)
+            "model": self.model_name if self.model is not None else "none",
+            "total_animals_processed": self.animals_processed,
+            "known_pet_identifications": self.pets_recognized,
+            "avg_processing_time": (
+                float(np.mean(self.processing_times)) if self.processing_times else 0.0
+            ),
+            "pet_identification_threshold": self.pet_identification_threshold,
+            "known_pets_count": len(self.known_pets),
         }

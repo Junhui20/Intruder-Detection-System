@@ -8,7 +8,6 @@
 # An upper bound is what makes "it worked when I wrote it" reproducible.
 #
 #   pip install -r requirements.txt
-#   pip install -r requirements-optional.txt   # MediaPipe
 #   pip install -r requirements-dev.txt        # tests and linting
 
 # ── Detection ──────────────────────────────────────────────────────────────
@@ -20,6 +19,9 @@ Pillow>=11.0,<13
 # ── Face recognition ───────────────────────────────────────────────────────
 insightface>=2.0,<3            # SCRFD + ArcFace packs (buffalo_sc / buffalo_l); 2.0 is a pure-Python wheel
 onnxruntime>=1.20,<2           # swap for onnxruntime-gpu to run the packs on CUDA
+
+# ── Pet re-identification ──────────────────────────────────────────────────
+transformers>=4.45,<5          # DINOv2 small / base from the Hugging Face hub
 
 # ── Torch (ultralytics needs it; pinned here so the pair stays coherent) ────
 torch>=2.6,<3
