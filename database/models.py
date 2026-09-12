@@ -13,11 +13,12 @@ import json
 @dataclass
 class Device:
     """
-    IP Camera device model.
-    
-    Represents network cameras with HTTP/HTTPS support and configuration.
+    A camera row. ``url`` is the stream that gets opened (HTTP MJPEG or RTSP);
+    the ip/port/https/video fields are the pre-URL form of the same thing and
+    are only consulted when ``url`` is empty.
     """
     id: Optional[int] = None
+    url: str = ""
     ip_address: str = ""
     port: int = 8080
     use_https: bool = False
@@ -25,11 +26,21 @@ class Device:
     status: str = "active"  # 'active' or 'inactive'
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+    def __post_init__(self):
+        from config.camera_config import build_camera_url
+
+        if not self.url and self.ip_address:
+            self.url = build_camera_url(
+                "https" if self.use_https else "http", self.ip_address, self.port,
+                "/video" if self.end_with_video else "",
+            )
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for database operations."""
         return {
             'id': self.id,
+            'url': self.url,
             'ip_address': self.ip_address,
             'port': self.port,
             'use_https': self.use_https,
@@ -44,6 +55,7 @@ class Device:
         """Create instance from dictionary."""
         return cls(
             id=data.get('id'),
+            url=data.get('url') or '',
             ip_address=data.get('ip_address', ''),
             port=data.get('port', 8080),
             use_https=bool(data.get('use_https', False)),
@@ -345,6 +357,7 @@ PRAGMA foreign_keys = ON;
 -- Create the devices table for IP camera management
 CREATE TABLE IF NOT EXISTS devices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    url TEXT NOT NULL DEFAULT '',
     ip_address TEXT NOT NULL,
     port INTEGER NOT NULL,
     use_https BOOLEAN DEFAULT 0,

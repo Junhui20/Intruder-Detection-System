@@ -47,10 +47,7 @@ class CameraConfig:
     """Camera configuration data structure."""
     camera_id: str
     name: str
-    ip_address: str
-    port: int
-    protocol: str
-    video_suffix: str
+    url: str  # rtsp://... or http://... stream
     priority: int = 1  # Higher number = higher priority
     enabled: bool = True
     max_fps: int = 30
@@ -194,13 +191,7 @@ class MultiCameraManager:
                 camera_manager = CameraManager()
 
                 # Configure camera
-                camera_config = {
-                    'ip_address': config.ip_address,
-                    'port': config.port,
-                    'protocol': config.protocol,
-                    'video_suffix': config.video_suffix,
-                    'name': config.name
-                }
+                camera_config = {'url': config.url, 'name': config.name}
 
                 # Test connection
                 if camera_manager.test_camera_connection(camera_config):
@@ -412,17 +403,9 @@ class MultiCameraManager:
             camera_manager = self.cameras[camera_id]
             config = self.camera_configs[camera_id]
 
-            # Configure camera
-            camera_config = {
-                'ip_address': config.ip_address,
-                'port': config.port,
-                'protocol': config.protocol,
-                'video_suffix': config.video_suffix,
-                'name': config.name
-            }
+            camera_config = {'id': camera_id, 'url': config.url, 'name': config.name, 'status': 'active'}
 
-            # Connect to camera
-            if camera_manager.connect_to_camera(camera_config):
+            if camera_manager._connect_ip_camera(camera_config):
                 self.camera_status[camera_id] = CameraStatus.ACTIVE
                 frame_number = 0
                 start_time = time.time()
@@ -723,28 +706,19 @@ if __name__ == "__main__":
         CameraConfig(
             camera_id="front_door",
             name="Front Door Camera",
-            ip_address="192.168.1.100",
-            port=8080,
-            protocol="http",
-            video_suffix="/video",
+            url="http://192.168.1.100:8080/video",
             priority=3
         ),
         CameraConfig(
             camera_id="backyard",
             name="Backyard Camera",
-            ip_address="192.168.1.101",
-            port=8080,
-            protocol="http",
-            video_suffix="/video",
+            url="http://192.168.1.101:8080/video",
             priority=2
         ),
         CameraConfig(
             camera_id="garage",
             name="Garage Camera",
-            ip_address="192.168.1.102",
-            port=8080,
-            protocol="http",
-            video_suffix="/video",
+            url="http://192.168.1.102:8080/video",
             priority=1
         )
     ]
