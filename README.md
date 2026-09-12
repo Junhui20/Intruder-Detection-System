@@ -25,10 +25,10 @@ protocol, retention) depends on the hardware.
 | Detector | YOLO11n *(vs YOLO26n — settled by benchmark)* | YOLO11n / YOLO26n |
 | Face recognition | InsightFace `buffalo_sc` | InsightFace `buffalo_l` |
 | Pet re-ID | DINOv2-small embeddings | DINOv2-base embeddings |
-| Event captions | Ollama `moondream` | Ollama `qwen2.5vl` |
+| Event captions | Ollama `qwen2.5vl:3b` | Ollama `qwen2.5vl:7b` |
 | Detection FPS (1 cam, 640 px) | *placeholder* | *placeholder* |
 | Face-ID latency | *placeholder* | *placeholder* |
-| Caption latency | *placeholder* | *placeholder* |
+| Caption latency | ~65 s (3b, CPU 4 threads) | 14 s (7b spills past 4 GB VRAM); 1.6 s with `captions.model: qwen2.5vl:3b` |
 | Pet re-ID latency | *placeholder* | *placeholder* |
 | RAM idle / under load | *placeholder* | *placeholder* |
 | Pi 5 / N100 (real numbers) | *contribute yours* | — |
@@ -69,9 +69,10 @@ portfolio piece.
   InsightFace (SCRFD + ArcFace) on ONNX Runtime, `buffalo_sc` low / `buffalo_l` high.
 - **Your own pet** — enrol a pet from photos; alerts distinguish *your* cat from
   *a* cat. *(Planned: embedding-based re-ID replacing today's colour heuristic.)*
-- **Event captions** — a local vision-language model writes one line per alert
-  ("person in a red jacket at the side gate"). *(Planned, via Ollama; off
-  gracefully if Ollama is not running.)*
+- **Event captions** — a local vision-language model writes one line under each
+  alert photo ("Blond woman in a black dress, holding cards, facing the camera").
+  Ollama with `qwen2.5vl:3b` (low) / `qwen2.5vl:7b` (high); the photo goes out first,
+  the caption is edited in when ready. Off, silently, when Ollama is not running.
 - **Cameras** — RTSP (any Tapo / Hikvision / Dahua / Reolink / ONVIF camera,
   vendor paths in [docs/CAMERA_SETUP.md](docs/CAMERA_SETUP.md)), HTTP MJPEG,
   DroidCam (an old phone as a camera), local webcam fallback, multi-camera.
@@ -90,6 +91,7 @@ cd Intruder-Detection-System
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python scripts/setup_secure_config.py   # writes .env with your Telegram token
+python scripts/setup_ollama.py          # optional: installs Ollama + pulls the caption model
 python main.py                          # add --headless to run without the desktop UI
 ```
 
@@ -140,7 +142,7 @@ methods.
 | T2 | CI matrix: Ubuntu × Windows × Python 3.12/3.14 | |
 | T3 | RTSP first-class | done |
 | T4 | InsightFace face backend (replaces LBPH) | done |
-| T5 | Ollama event captions + setup script | |
+| T5 | Ollama event captions + setup script | done |
 | T6–T7 | Pet re-ID: model choice, enrol → embed → match, PetFace eval | |
 | T8 | Web UI, delete tkinter | |
 | T9 | Telegram commands, `/enroll` from an alert photo | |
