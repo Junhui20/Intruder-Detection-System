@@ -4,9 +4,9 @@
 
 ### Prerequisites
 
-- **Python 3.8+** (Recommended: Python 3.12)
-- **NVIDIA GPU** with CUDA support (RTX 3050+ recommended)
-- **Windows 11** (64-bit)
+- **Python 3.12+** (3.12 and 3.14 verified)
+- **NVIDIA GPU** with CUDA support (optional; everything runs on CPU)
+- **Linux or Windows** (macOS untested)
 - **Git** for version control
 - **Visual Studio Code** (recommended IDE)
 
@@ -61,9 +61,9 @@ gui/
 
 ```
 database/
-├── models.py              # SQLAlchemy models
+├── models.py              # Dataclasses + DATABASE_SCHEMA (raw SQL)
 ├── database_manager.py    # Database operations
-└── migrations/            # Schema migrations
+└── sqlite_schema.sql      # Reference copy of the schema
 ```
 
 ## 🛠️ Development Workflow
@@ -265,33 +265,14 @@ if config.use_new_recognition:
 
 ### Database Schema Changes
 
-1. **Create Migration**:
-```python
-# database/migrations/add_new_table.py
-def upgrade():
-    """Add new table for feature."""
-    op.create_table(
-        'new_feature',
-        sa.Column('id', sa.Integer, primary_key=True),
-        sa.Column('name', sa.String(100), nullable=False),
-        sa.Column('created_at', sa.DateTime, default=datetime.utcnow)
-    )
+There is no migration framework. `DATABASE_SCHEMA` in `database/models.py` is
+raw SQL with `CREATE TABLE IF NOT EXISTS`, applied at startup.
 
-def downgrade():
-    """Remove new table."""
-    op.drop_table('new_feature')
-```
-
-2. **Update Models**:
-```python
-# database/models.py
-class NewFeature(Base):
-    __tablename__ = 'new_feature'
-    
-    id = Column(Integer, primary_key=True)
-    name = Column(String(100), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-```
+1. Add the column or table to `DATABASE_SCHEMA` and to `database/sqlite_schema.sql`.
+2. Update the matching dataclass in `database/models.py`.
+3. For an existing database, add an `ALTER TABLE` guarded by a check against
+   `PRAGMA table_info` in `DatabaseManager`, so a fresh install and an upgraded
+   one end up with the same schema.
 
 ## 🐛 Debugging
 

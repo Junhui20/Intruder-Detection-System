@@ -28,7 +28,7 @@ class MainWindow:
     - Centralized control interface
     """
     
-    def __init__(self, title: str = "Intruder Detection System 2025"):
+    def __init__(self, title: str = "Intruder Detection System"):
         """
         Initialize the main window.
         
@@ -98,7 +98,7 @@ class MainWindow:
         # Title
         title_label = ttk.Label(
             header_frame, 
-            text="🚀 Intruder Detection System 2025",
+            text="🚀 Intruder Detection System",
             font=("Arial", 20, "bold")
         )
         title_label.pack(side=tk.LEFT)
