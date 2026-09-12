@@ -65,6 +65,7 @@ class DatabaseManager:
             with self.get_connection() as conn:
                 # Execute schema creation
                 conn.executescript(DATABASE_SCHEMA)
+                self._migrate(conn)
                 
                 # Insert default configuration if not exists
                 self._insert_default_config(conn)
@@ -85,6 +86,15 @@ class DatabaseManager:
             logger.error(f"Failed to initialize database: {e}")
             raise
     
+    def _migrate(self, conn: sqlite3.Connection):
+        """Bring a database created by an older version up to the current schema."""
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(devices)")}
+        if "url" not in columns:
+            conn.execute("ALTER TABLE devices ADD COLUMN url TEXT NOT NULL DEFAULT ''")
+        for row in conn.execute("SELECT * FROM devices WHERE url = ''").fetchall():
+            device = Device.from_dict(dict(row))  # __post_init__ builds the URL
+            conn.execute("UPDATE devices SET url = ? WHERE id = ?", (device.url, device.id))
+
     def _insert_default_config(self, conn: sqlite3.Connection):
         """Insert default configuration values."""
         for config_key, config_value, config_type, description in DEFAULT_CONFIG:
@@ -203,9 +213,9 @@ class DatabaseManager:
         try:
             with self.get_connection() as conn:
                 cursor = conn.execute("""
-                    INSERT INTO devices (ip_address, port, use_https, end_with_video, status)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (device.ip_address, device.port, device.use_https, 
+                    INSERT INTO devices (url, ip_address, port, use_https, end_with_video, status)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (device.url, device.ip_address, device.port, device.use_https, 
                      device.end_with_video, device.status))
                 
                 device_id = cursor.lastrowid
@@ -253,9 +263,9 @@ class DatabaseManager:
             with self.get_connection() as conn:
                 conn.execute("""
                     UPDATE devices 
-                    SET ip_address = ?, port = ?, use_https = ?, end_with_video = ?, status = ?
+                    SET url = ?, ip_address = ?, port = ?, use_https = ?, end_with_video = ?, status = ?
                     WHERE id = ?
-                """, (device.ip_address, device.port, device.use_https, 
+                """, (device.url, device.ip_address, device.port, device.use_https, 
                      device.end_with_video, device.status, device.id))
                 
                 conn.commit()
@@ -308,47 +318,16 @@ class DatabaseManager:
 
                 logger.info(f"Reorganizing {len(devices)} device IDs from {actual_ids} to {expected_ids}")
 
-                # Use a safer approach: create mapping and update in batches
-                # First, create a temporary mapping table
-                conn.execute("DROP TABLE IF EXISTS id_mapping")
-                conn.execute("""
-                    CREATE TEMPORARY TABLE id_mapping (
-                        old_id INTEGER,
-                        new_id INTEGER,
-                        ip_address TEXT,
-                        port INTEGER,
-                        use_https BOOLEAN,
-                        end_with_video BOOLEAN,
-                        status TEXT,
-                        created_at DATETIME,
-                        updated_at DATETIME
-                    )
-                """)
-
-                # Insert mapping data
-                for new_id, device in enumerate(devices, 1):
-                    conn.execute("""
-                        INSERT INTO id_mapping (old_id, new_id, ip_address, port, use_https, end_with_video, status, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (device.id, new_id, device.ip_address, device.port, device.use_https,
-                         device.end_with_video, device.status, device.created_at, device.updated_at))
-
-                # Clear the devices table and reinsert with new IDs
                 conn.execute("DELETE FROM devices")
-
-                # Insert devices with new sequential IDs
-                cursor = conn.execute("SELECT * FROM id_mapping ORDER BY new_id")
-                for row in cursor.fetchall():
+                for new_id, d in enumerate(devices, 1):
                     conn.execute("""
-                        INSERT INTO devices (id, ip_address, port, use_https, end_with_video, status, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8]))  # new_id and other fields
+                        INSERT INTO devices (id, url, ip_address, port, use_https, end_with_video, status, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (new_id, d.url, d.ip_address, d.port, d.use_https, d.end_with_video,
+                          d.status, d.created_at, d.updated_at))
 
                 # Reset the autoincrement counter
                 conn.execute(f"UPDATE sqlite_sequence SET seq = {len(devices)} WHERE name = 'devices'")
-
-                # Clean up temporary table
-                conn.execute("DROP TABLE id_mapping")
 
                 conn.commit()
                 logger.info(f"Successfully reorganized {len(devices)} device IDs to be sequential (1-{len(devices)})")

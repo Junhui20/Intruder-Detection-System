@@ -1,22 +1,48 @@
 """
 Camera Management System
 
-This module handles IP camera connections with HTTP/HTTPS support
-and automatic fallback to local cameras as specified in requirements.
+Opens the stream URLs the configuration hands over — HTTP MJPEG (DroidCam,
+IP Webcam) or RTSP — and falls back to a local webcam when none answers.
 """
 
 import cv2
 import numpy as np
+import os
 import time
 import requests
 from typing import Dict, List, Optional, Tuple
 import logging
 import threading
-from urllib.parse import urlparse
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# FFmpeg reads these when it opens an RTSP URL: TCP so Wi-Fi packet loss does not
+# smear frames, and a 5 s socket timeout so a dead camera fails instead of hanging.
+# `stimeout` is the same knob on FFmpeg 4.x; the other is ignored.
+os.environ.setdefault(
+    "OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp|timeout;5000000|stimeout;5000000"
+)
+
+
+def open_stream(url: str) -> cv2.VideoCapture:
+    """
+    Open a camera URL with the settings that keep it live.
+
+    Args:
+        url: ``rtsp://``, ``http://`` or ``https://`` stream URL.
+
+    Returns:
+        The capture; check ``isOpened()``.
+    """
+    if url.startswith("rtsp://"):
+        cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+    else:
+        cap = cv2.VideoCapture(url)
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))  # what DroidCam serves
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # always the newest frame, never a backlog
+    return cap
 
 
 class CameraManager:
@@ -126,11 +152,7 @@ class CameraManager:
                 ip_camera_attempted = True
                 camera_id = config['id']
 
-                # Construct URL for logging
-                protocol = 'https' if config.get('use_https', False) else 'http'
-                video_suffix = '/video' if config.get('end_with_video', False) else ''
-                camera_url = f"{protocol}://{config['ip_address']}:{config['port']}{video_suffix}"
-
+                camera_url = config['url']
                 logger.info(f"Attempting to connect to IP camera {camera_id}: {camera_url}")
 
                 if self._connect_ip_camera(config):
@@ -167,16 +189,7 @@ class CameraManager:
         """
         try:
             camera_id = config['id']
-            ip_address = config['ip_address']
-            port = config['port']
-            use_https = config['use_https']
-            end_with_video = config['end_with_video']
-            
-            # Construct camera URL
-            protocol = 'https' if use_https else 'http'
-            video_suffix = '/video' if end_with_video else ''
-            camera_url = f"{protocol}://{ip_address}:{port}{video_suffix}"
-            
+            camera_url = config['url']
             logger.info(f"Attempting to connect to camera: {camera_url}")
 
             # Check if this might be DroidCam
@@ -197,8 +210,6 @@ class CameraManager:
             logger.info(f"Creating VideoCapture for: {camera_url}")
 
             # Use threading to implement timeout for VideoCapture creation
-            import threading
-            import time
 
             cap = None
             exception_occurred = None
@@ -206,7 +217,7 @@ class CameraManager:
             def create_videocapture():
                 nonlocal cap, exception_occurred
                 try:
-                    cap = cv2.VideoCapture(camera_url)
+                    cap = open_stream(camera_url)
                 except Exception as e:
                     exception_occurred = e
 
@@ -230,24 +241,6 @@ class CameraManager:
                 logger.error(f"Failed to create VideoCapture for: {camera_url}")
                 return None
 
-            # Set optimized properties for real-time processing
-            try:
-                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimal buffer
-                cap.set(cv2.CAP_PROP_FPS, 30)  # Target 30 FPS
-
-                # Additional optimizations for IP cameras (DroidCam compatible)
-                if camera_url.startswith(('http', 'rtsp')):
-                    # Try to set MJPEG codec (works well with DroidCam)
-                    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
-                    # Set reasonable resolution for DroidCam
-                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
-                logger.debug(f"VideoCapture properties set for {camera_url}")
-            except Exception as e:
-                logger.warning(f"Failed to set some VideoCapture properties: {e}")
-                # Continue anyway - basic capture might still work
-            
             # Test if camera is opened and can read frames
             if cap.isOpened():
                 logger.info(f"VideoCapture opened successfully for {camera_url}")
@@ -591,18 +584,12 @@ class CameraManager:
                 logger.info("Local camera test failed: could not open camera")
                 return False
             else:
-                # Test IP camera
-                ip_address = config['ip_address']
-                port = config['port']
-                use_https = config.get('use_https', False)
-                end_with_video = config.get('end_with_video', False)
+                from config.camera_config import CameraConfig
 
-                protocol = 'https' if use_https else 'http'
-                video_suffix = '/video' if end_with_video else ''
-                camera_url = f"{protocol}://{ip_address}:{port}{video_suffix}"
-
+                camera_url = config['url']
                 logger.info(f"Testing IP camera connection to: {camera_url}")
-                result = self._test_camera_connection(camera_url)
+                result, message = CameraConfig(url=camera_url).test_connection()
+                logger.info(message)
                 logger.info(f"IP camera test result: {result}")
                 return result
 
