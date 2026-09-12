@@ -1,0 +1,31 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.12", "3.14"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - uses: actions/cache@v4
+        with:
+          path: ~/.insightface
+          key: insightface-buffalo_sc
+      # The CPU index keeps Linux from pulling 2.5 GB of CUDA wheels
+      - run: pip install -r requirements.txt -r requirements-dev.txt --extra-index-url https://download.pytorch.org/whl/cpu
+      - run: flake8
+      - run: black --check core/face_recognition.py core/event_captions.py scripts/setup_ollama.py tests/test_camera_config.py tests/test_event_captions.py
+      - run: python -m pytest tests/ -q
