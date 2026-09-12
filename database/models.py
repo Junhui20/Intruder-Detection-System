@@ -438,7 +438,7 @@ DEFAULT_CONFIG = [
     ('yolo_confidence', '0.5', 'float', 'YOLO detection confidence threshold'),
     ('human_confidence_threshold', '0.45', 'float', 'Minimum ArcFace cosine similarity to name a face'),
     ('animal_confidence_threshold', '0.6', 'float', 'Configurable confidence threshold for animal detection'),
-    ('pet_identification_threshold', '0.7', 'float', 'Confidence threshold for individual pet identification'),
+    ('pet_identification_threshold', '0.65', 'float', 'Minimum DINOv2 cosine similarity to name a pet'),
     ('multi_face_detection', '1', 'boolean', 'Enable simultaneous multi-face detection'),
     ('max_faces_per_frame', '10', 'integer', 'Maximum faces to process per frame'),
     ('unknown_person_timer', '5', 'integer', 'Seconds before unknown person alert'),

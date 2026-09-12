@@ -44,7 +44,7 @@ from database.database_manager import DatabaseManager
 from core.detection_engine import DetectionEngine
 from core.event_captions import TIER_MODELS as CAPTION_MODELS, EventCaptioner
 from core.face_recognition import TIER_MODELS as FACE_MODELS, FaceRecognitionSystem
-from core.animal_recognition import AnimalRecognitionSystem
+from core.animal_recognition import TIER_MODELS as PET_MODELS, AnimalRecognitionSystem
 from core.camera_manager import CameraManager
 from core.notification_system import NotificationSystem
 from gui.main_window import MainWindow
@@ -254,7 +254,9 @@ class IntruderDetectionSystem:
             # Initialize animal recognition system
             self.animal_recognition = AnimalRecognitionSystem(
                 confidence_threshold=self.detection_config.animal_confidence_threshold,
-                pet_identification_threshold=self.detection_config.pet_identification_threshold
+                pet_identification_threshold=self.detection_config.pet_identification_threshold,
+                model=self.settings.pet_model or PET_MODELS[self.settings.tier],
+                use_gpu=self.settings.enable_gpu,
             )
             
             # Load known pets from database
