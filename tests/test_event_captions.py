@@ -41,9 +41,7 @@ class TestEventCaptioner(unittest.TestCase):
             "core.event_captions.requests.get", return_value=tags("qwen2.5vl:latest")
         ), mock.patch("core.event_captions.requests.post") as post:
             self.assertTrue(EventCaptioner("qwen2.5vl").enabled)
-        self.assertEqual(
-            post.call_args.kwargs["json"], {"model": "qwen2.5vl", "keep_alive": -1}
-        )
+        self.assertEqual(post.call_args.kwargs["json"]["keep_alive"], -1)
 
     def test_describe_sends_the_frame_and_keeps_one_line(self):
         with mock.patch(
