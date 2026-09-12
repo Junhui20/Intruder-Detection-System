@@ -1,11 +1,14 @@
+# Model-size preset: low (CPU-class hardware) or high (a GPU). Per-feature
+# overrides below win over the preset.
+tier: low
 camera:
   buffer_size: 1
   connection_timeout: 2
 detection:
+  face_model: ''  # buffalo_sc | buffalo_l; empty = from tier
   batch_processing: false
   enable_gpu_acceleration: true
   enable_model_optimization: true
-  face_detection_method: hog
   max_faces_per_frame: 5
   yolo_confidence: 0.6
   yolo_iou_threshold: 0.5

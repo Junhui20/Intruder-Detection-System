@@ -59,7 +59,7 @@ python scripts/check_dependencies.py
 
 ❌ Missing Dependencies (3):
    📦 ultralytics >=8.0.0 - Not installed
-   📦 face-recognition >=1.3.0 - Not installed
+   📦 insightface >=2.0 - Not installed
    📦 requests >=2.31.0 - Not installed
 
 📊 Summary:
@@ -69,7 +69,7 @@ python scripts/check_dependencies.py
    ❌ Missing: 3
 
 💡 Installation Command:
-   pip install ultralytics>=8.0.0 face-recognition>=1.3.0 requests>=2.31.0 torch>=2.0.0 torchvision>=0.15.0
+   pip install ultralytics>=8.0.0 insightface>=2.0 requests>=2.31.0 torch>=2.0.0 torchvision>=0.15.0
 ```
 
 ### Option B: Smart Installation
@@ -158,13 +158,12 @@ source venv/bin/activate  # Linux/Mac
 venv\Scripts\activate     # Windows
 ```
 
-#### 3. Face Recognition Installation Fails
-**Common on Windows/Mac**
-```bash
-# Install dependencies first
-pip install cmake dlib
-pip install face-recognition
-```
+#### 3. Face Recognition Models
+Face recognition runs on InsightFace (`insightface` + `onnxruntime`, both in
+`requirements.txt`). The model pack for your tier (`buffalo_sc` ≈ 15 MB,
+`buffalo_l` ≈ 280 MB) downloads to `~/.insightface/models` on the first run,
+so the first start needs internet. For CUDA inference replace `onnxruntime`
+with `onnxruntime-gpu`.
 
 #### 4. OpenCV Installation Issues
 ```bash
@@ -238,25 +237,10 @@ print('✅ All core systems can be imported')
 
 #### Common Windows Issues & Solutions
 
-**Issue: "CMake not found" (Most Common)**
-```powershell
-# Solution 1: Install CMake (Recommended)
-# 1. Download from https://cmake.org/download/
-# 2. Run installer and check "Add CMake to system PATH"
-# 3. Restart terminal and test: cmake --version
-# 4. Install face-recognition: pip install face-recognition
-
-# Solution 2: Skip face recognition temporarily
-pip install -r requirements.txt
-python main.py  # Run without face recognition
-```
-
-**Issue: "Visual Studio Build Tools required"**
-```powershell
-# Install build tools
-pip install --upgrade setuptools wheel
-# Or download Visual Studio Build Tools from Microsoft
-```
+**Issue: "Microsoft Visual C++ 14.0 or greater is required"**
+No package in `requirements.txt` needs a compiler any more (`insightface` 2.0
+is a pure-Python wheel). If you see this, a stale `pip` picked an old sdist —
+`pip install --upgrade pip` and retry.
 
 **Issue: "Permission denied"**
 ```powershell
@@ -373,7 +357,7 @@ If automated installation fails, you can install dependencies manually:
 pip install torch>=2.0.0 torchvision>=0.15.0
 pip install ultralytics>=8.0.0
 pip install opencv-python>=4.8.0
-pip install face-recognition>=1.3.0
+pip install insightface>=2.0 onnxruntime>=1.20
 pip install numpy>=1.24.0
 pip install Pillow>=10.0.0
 

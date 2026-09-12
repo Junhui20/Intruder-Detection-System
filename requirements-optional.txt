@@ -1,17 +1,9 @@
-# Optional recognition backends.
+# Optional extras — both only feed core/animal_recognition.py, which runs
+# without them (pet identification stays colour-only until the re-ID work lands).
 #
-# `core/face_recognition.py` picks the best backend available at import time and
-# already falls back to OpenCV DNN+LBPH when neither of these is installed, so
-# the system runs without them — with less accurate face matching.
-#
-# They are not in requirements.txt because both are painful installs that would
-# otherwise block every fresh clone:
-#
-#   face-recognition  builds dlib from source. Needs cmake and a C++ toolchain,
-#                     and its own last release was February 2020, so it lags
-#                     new Python versions by a long way.
-#   mediapipe         was imported by core/face_recognition.py all along but
-#                     never declared anywhere. Declared here now.
+#   face-recognition  builds dlib from source (cmake + C++ toolchain). Last
+#                     release February 2020.
+#   mediapipe         imported when present; never required.
 #
 #   pip install -r requirements-optional.txt
 

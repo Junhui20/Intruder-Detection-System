@@ -8,7 +8,7 @@
 # An upper bound is what makes "it worked when I wrote it" reproducible.
 #
 #   pip install -r requirements.txt
-#   pip install -r requirements-optional.txt   # dlib face encodings, MediaPipe
+#   pip install -r requirements-optional.txt   # MediaPipe
 #   pip install -r requirements-dev.txt        # tests and linting
 
 # ── Detection ──────────────────────────────────────────────────────────────
@@ -16,6 +16,10 @@ ultralytics>=8.4.0,<9          # YOLO11n
 opencv-python>=4.14,<5         # NOT <6: 5.0 is a breaking major release
 numpy>=2.1,<3
 Pillow>=11.0,<13
+
+# ── Face recognition ───────────────────────────────────────────────────────
+insightface>=2.0,<3            # SCRFD + ArcFace packs (buffalo_sc / buffalo_l); 2.0 is a pure-Python wheel
+onnxruntime>=1.20,<2           # swap for onnxruntime-gpu to run the packs on CUDA
 
 # ── Torch (ultralytics needs it; pinned here so the pair stays coherent) ────
 torch>=2.6,<3
