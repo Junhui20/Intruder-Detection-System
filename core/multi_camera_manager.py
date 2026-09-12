@@ -93,14 +93,9 @@ class ResourceMonitor:
             memory_percent = memory.percent
 
             # GPU monitoring (if available)
-            gpu_percent = 0.0
-            try:
-                import GPUtil
-                gpus = GPUtil.getGPUs()
-                if gpus:
-                    gpu_percent = gpus[0].load * 100
-            except ImportError:
-                pass
+            from utils.gpu_probe import gpu_load_percent
+
+            gpu_percent = gpu_load_percent() or 0.0
 
             return {
                 'cpu': cpu_percent,
@@ -687,7 +682,8 @@ class MultiCameraManager:
             active_cameras = 0
 
             for camera_id, stats in self.performance_stats['camera_stats'].items():
-                if self.camera_status[camera_id] == CameraStatus.ACTIVE:
+                # camera_stats can outlive camera_status by a pass after removal
+                if self.camera_status.get(camera_id) == CameraStatus.ACTIVE:
                     total_fps += stats.get('average_fps', 0)
                     active_cameras += 1
 

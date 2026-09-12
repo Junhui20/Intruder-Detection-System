@@ -218,17 +218,9 @@ class GPUOptimizer:
     
     def _get_gpu_temperature(self) -> Optional[float]:
         """Get GPU temperature if available."""
-        try:
-            import GPUtil
-            gpus = GPUtil.getGPUs()
-            if gpus:
-                return gpus[0].temperature
-        except ImportError:
-            pass
-        except Exception as e:
-            logger.debug(f"Could not get GPU temperature: {e}")
-        
-        return None
+        from utils.gpu_probe import gpu_temperature_c
+
+        return gpu_temperature_c()
     
     def cleanup_gpu_memory(self):
         """Clean up GPU memory."""

@@ -231,12 +231,7 @@ class IntruderDetectionSystem:
             else:
                 logger.info("Initializing Standard Detection Engine...")
 
-            self.detection_engine = DetectionEngine(
-                model_path=self.detection_config.yolo_model_path,
-                confidence=self.detection_config.yolo_confidence,
-                use_optimized_engine=self.detection_config.use_optimized_engine,
-                optimized_model_dir=self.detection_config.optimized_model_dir
-            )
+            self.detection_engine = DetectionEngine.from_config(self.detection_config)
             
             # Initialize face recognition system
             self.face_recognition = FaceRecognitionSystem(

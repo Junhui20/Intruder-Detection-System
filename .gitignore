@@ -179,3 +179,20 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# ── Databases ──────────────────────────────────────────────────
+# detection_system.db was committed to this public repo. It held only
+# defaults, but this one stores faces, detections and Telegram user ids the
+# moment the system is actually run. tests/test_security.py has been asking
+# for this entry since the first commit.
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Runtime output ─────────────────────────────────────────────
+# `*.log` was already covered under the Django section by accident; the
+# directory itself was not, and the security test asks for it by name.
+logs/
+
+# Local planning scratch (handoffs, tickets) — never published
+.scratch/

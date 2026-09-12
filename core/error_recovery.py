@@ -329,7 +329,15 @@ class ErrorRecoveryManager:
                 from config.detection_config import DetectionConfig
                 
                 config = DetectionConfig()
-                self.main_system.detection_engine = DetectionEngine(config)
+                # Same two steps main.py takes, or recovery silently reverts to
+                # the default model and thresholds.
+                if getattr(self.main_system, "db_manager", None):
+                    config.update_from_database(self.main_system.db_manager)
+                engine = DetectionEngine.from_config(config)
+                if engine.model is None:
+                    logger.error("Detection engine recovery failed: model did not load")
+                    return False
+                self.main_system.detection_engine = engine
                 return True
             
             return False

@@ -229,13 +229,12 @@ class SmartInstaller:
             print(f"   ❌ Ultralytics YOLO: {e}")
             failed_imports.append("Ultralytics")
         
-        # Test face recognition
+        # Optional backend — report, never fail the install on it
         try:
             import face_recognition
-            print("   ✅ Face Recognition")
-        except ImportError as e:
-            print(f"   ❌ Face Recognition: {e}")
-            failed_imports.append("Face Recognition")
+            print("   ✅ Face Recognition (dlib backend)")
+        except ImportError:
+            print("   ➖ Face Recognition: dlib not installed, OpenCV fallback in use")
         
         if failed_imports:
             print(f"   ⚠️ Failed imports: {', '.join(failed_imports)}")

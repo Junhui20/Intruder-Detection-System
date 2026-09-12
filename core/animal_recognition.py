@@ -7,7 +7,6 @@ using face_recognition + YOLO + color identification as preferred by the user.
 
 import cv2
 import numpy as np
-import face_recognition
 import time
 from typing import Dict, List, Tuple, Optional
 import logging
@@ -17,6 +16,20 @@ import os
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Optional backend (requirements-optional.txt). Without it the module still
+# imports, but individual pet identification cannot succeed: the colour-only
+# score tops out at 0.3 against a 0.49 threshold. A real re-identification
+# backend is planned to replace this.
+try:
+    import face_recognition
+
+    FACE_RECOGNITION_AVAILABLE = True
+except ImportError:
+    FACE_RECOGNITION_AVAILABLE = False
+    logger.warning(
+        "face_recognition not installed; individual pet identification is unavailable"
+    )
 
 
 class AnimalRecognitionSystem:
@@ -133,7 +146,11 @@ class AnimalRecognitionSystem:
     def _compute_pet_encodings(self, pet_info: Dict):
         """Compute face encodings for a pet from its images."""
         encodings = []
-        
+
+        if not FACE_RECOGNITION_AVAILABLE:
+            pet_info['face_encodings'] = encodings
+            return
+
         for image_path in pet_info['image_paths']:
             try:
                 if os.path.exists(image_path):
@@ -282,6 +299,9 @@ class AnimalRecognitionSystem:
     
     def _recognize_pet_face(self, animal_image: np.ndarray, animal_class: int) -> Optional[Dict]:
         """Use face_recognition library for pet face identification."""
+        if not FACE_RECOGNITION_AVAILABLE:
+            return None
+
         try:
             # face_recognition works surprisingly well on animal faces
             face_encodings = face_recognition.face_encodings(animal_image)

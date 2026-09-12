@@ -112,12 +112,15 @@ class Settings:
                 with open(config_path, 'r') as f:
                     config_data = yaml.safe_load(f) or {}
 
-                # Apply config file values
+                # A nested key matches either `key` or `section_key`
+                # (`database: path:` -> `database_path`). Leaf name first.
                 for section, values in config_data.items():
                     if isinstance(values, dict):
                         for key, value in values.items():
-                            if hasattr(settings, key):
-                                setattr(settings, key, value)
+                            for attr in (key, f"{section}_{key}"):
+                                if hasattr(settings, attr):
+                                    setattr(settings, attr, value)
+                                    break
                     else:
                         if hasattr(settings, section):
                             setattr(settings, section, values)
@@ -135,8 +138,11 @@ class Settings:
     def _load_from_environment(self):
         """Load settings from environment variables with proper type conversion."""
         # Secure settings (prioritize environment variables)
+        # Environment only. The config-file loop above may have setattr'd a
+        # token from the file; it is discarded here rather than kept as a
+        # fallback, and get_secure_config no longer reads the file either.
         self.bot_token = get_secure_config("telegram.bot_token", env_var="TELEGRAM_BOT_TOKEN",
-                                         config_path="telegram.bot_token", required=False) or self.bot_token
+                                         config_path="telegram.bot_token", required=False) or ""
 
         # Performance settings
         self.max_cpu_usage = get_config("max_cpu_usage", self.max_cpu_usage,

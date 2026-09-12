@@ -34,6 +34,17 @@ class DatabaseManager:
     - Connection pooling and management
     - Error handling and recovery
     """
+
+    # Units for the metrics the system records; unlisted types store NULL.
+    METRIC_UNITS = {
+        'fps': 'fps',
+        'cpu_usage': '%',
+        'memory_usage': '%',
+        'gpu_usage': '%',
+        'detection_time': 'ms',
+        'face_recognition_time': 'ms',
+        'animal_recognition_time': 'ms',
+    }
     
     def __init__(self, db_path: str = "detection_system.db"):
         """
@@ -594,26 +605,6 @@ class DatabaseManager:
             logger.error(f"Failed to backup database: {e}")
             return False
     
-    def get_database_stats(self) -> Dict[str, int]:
-        """Get database statistics."""
-        try:
-            with self.get_connection() as conn:
-                stats = {}
-                
-                tables = ['devices', 'whitelist', 'notification_settings', 
-                         'detection_logs', 'system_metrics', 'system_config']
-                
-                for table in tables:
-                    cursor = conn.execute(f"SELECT COUNT(*) FROM {table}")
-                    stats[f"{table}_count"] = cursor.fetchone()[0]
-                
-                return stats
-                
-        except Exception as e:
-            logger.error(f"Failed to get database stats: {e}")
-            return {}
-
-    # Convenience methods using database views
     def get_active_cameras(self) -> List[Device]:
         """Get all active cameras using the active_cameras view."""
         try:
@@ -707,50 +698,6 @@ class DatabaseManager:
             logger.error(f"Failed to log detection: {e}")
             return False
 
-    def get_recent_detections(self, limit: int = 100, detection_type: str = None) -> List[DetectionLog]:
-        """Get recent detection logs."""
-        try:
-            with self.get_connection() as conn:
-                if detection_type:
-                    cursor = conn.execute(
-                        """SELECT * FROM detection_logs WHERE detection_type = ?
-                           ORDER BY detected_at DESC LIMIT ?""",
-                        (detection_type, limit)
-                    )
-                else:
-                    cursor = conn.execute(
-                        "SELECT * FROM detection_logs ORDER BY detected_at DESC LIMIT ?",
-                        (limit,)
-                    )
-
-                return [DetectionLog.from_dict(dict(row)) for row in cursor.fetchall()]
-
-        except Exception as e:
-            logger.error(f"Failed to get recent detections: {e}")
-            return []
-
-    def get_detection_stats(self, days: int = 7) -> Dict[str, int]:
-        """Get detection statistics for the last N days."""
-        try:
-            with self.get_connection() as conn:
-                cursor = conn.execute(
-                    """SELECT detection_type, COUNT(*) as count
-                       FROM detection_logs
-                       WHERE detected_at >= datetime('now', '-{} days')
-                       GROUP BY detection_type""".format(days)
-                )
-
-                stats = {}
-                for row in cursor.fetchall():
-                    stats[row[0]] = row[1]
-
-                return stats
-
-        except Exception as e:
-            logger.error(f"Failed to get detection stats: {e}")
-            return {}
-
-    # System metrics methods
     def log_system_metric(self, metric_type: str, metric_value: float, unit: str = None) -> bool:
         """
         Log a system performance metric to the database.
@@ -784,63 +731,6 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Failed to log system metric: {e}")
             return False
-
-    def log_performance_metrics(self, metrics: Dict[str, float]) -> bool:
-        """
-        Log multiple performance metrics at once.
-
-        Args:
-            metrics: Dictionary of metric_type -> value pairs
-
-        Returns:
-            True if all metrics logged successfully
-        """
-        try:
-            success_count = 0
-
-            # Common metric units
-            metric_units = {
-                'fps': 'fps',
-                'cpu_usage': '%',
-                'memory_usage': '%',
-                'gpu_usage': '%',
-                'detection_time': 'ms',
-                'face_recognition_time': 'ms',
-                'animal_recognition_time': 'ms'
-            }
-
-            for metric_type, value in metrics.items():
-                unit = metric_units.get(metric_type, None)
-                if self.log_system_metric(metric_type, value, unit):
-                    success_count += 1
-
-            return success_count == len(metrics)
-
-        except Exception as e:
-            logger.error(f"Failed to log performance metrics: {e}")
-            return False
-
-    def get_recent_metrics(self, metric_type: str = None, limit: int = 100) -> List[SystemMetrics]:
-        """Get recent system metrics."""
-        try:
-            with self.get_connection() as conn:
-                if metric_type:
-                    cursor = conn.execute(
-                        """SELECT * FROM system_metrics WHERE metric_type = ?
-                           ORDER BY recorded_at DESC LIMIT ?""",
-                        (metric_type, limit)
-                    )
-                else:
-                    cursor = conn.execute(
-                        "SELECT * FROM system_metrics ORDER BY recorded_at DESC LIMIT ?",
-                        (limit,)
-                    )
-
-                return [SystemMetrics.from_dict(dict(row)) for row in cursor.fetchall()]
-
-        except Exception as e:
-            logger.error(f"Failed to get recent metrics: {e}")
-            return []
 
     def get_metric_averages(self, hours: int = 24) -> Dict[str, float]:
         """Get average metrics for the last N hours."""
@@ -890,7 +780,8 @@ class DatabaseManager:
             stats = {}
             with self.get_connection() as conn:
                 # Get table counts
-                tables = ['devices', 'whitelist', 'notification_settings', 'detection_logs', 'system_metrics']
+                tables = ['devices', 'whitelist', 'notification_settings',
+                          'detection_logs', 'system_metrics', 'system_config']
 
                 for table in tables:
                     cursor = conn.execute(f"SELECT COUNT(*) FROM {table}")
@@ -903,15 +794,33 @@ class DatabaseManager:
             logger.error(f"Failed to get database stats: {e}")
             return {}
 
-    def get_recent_detections(self, limit: int = 50) -> List[DetectionLog]:
-        """Get recent detection logs."""
+    def get_recent_detections(self, limit: int = 50,
+                              detection_type: str = None) -> List[DetectionLog]:
+        """
+        Get recent detection logs, optionally of one type only.
+
+        Args:
+            limit: Maximum rows to return, newest first
+            detection_type: 'human' or 'animal' to filter; None for all
+
+        Returns:
+            List of DetectionLog rows
+        """
         try:
             with self.get_connection() as conn:
-                cursor = conn.execute(
-                    """SELECT * FROM detection_logs
-                       ORDER BY detected_at DESC LIMIT ?""",
-                    (limit,)
-                )
+                if detection_type:
+                    cursor = conn.execute(
+                        """SELECT * FROM detection_logs
+                           WHERE detection_type = ?
+                           ORDER BY detected_at DESC LIMIT ?""",
+                        (detection_type, limit)
+                    )
+                else:
+                    cursor = conn.execute(
+                        """SELECT * FROM detection_logs
+                           ORDER BY detected_at DESC LIMIT ?""",
+                        (limit,)
+                    )
 
                 detections = []
                 for row in cursor.fetchall():
@@ -1014,8 +923,17 @@ class DatabaseManager:
             logger.error(f"Failed to get pet identification stats: {e}")
             return {}
 
-    def get_recent_metrics(self, metric_type: str = None, limit: int = 100) -> List[Dict]:
-        """Get recent system metrics from database."""
+    def get_recent_metrics(self, metric_type: str = None, limit: int = 100) -> List[SystemMetrics]:
+        """
+        Get recent system metrics from database.
+
+        Args:
+            metric_type: Metric name to filter on; None for all
+            limit: Maximum rows to return, newest first
+
+        Returns:
+            List of SystemMetrics objects (the GUI reads attributes off them)
+        """
         try:
             with self.get_connection() as conn:
                 if metric_type:
@@ -1034,8 +952,7 @@ class DatabaseManager:
 
                 metrics = []
                 for row in cursor.fetchall():
-                    metric = SystemMetrics.from_dict(dict(row))
-                    metrics.append(metric.to_dict())
+                    metrics.append(SystemMetrics.from_dict(dict(row)))
 
                 return metrics
 
@@ -1044,15 +961,23 @@ class DatabaseManager:
             return []
 
     def log_performance_metrics(self, metrics: Dict[str, float]) -> bool:
-        """Log multiple performance metrics to database."""
+        """
+        Log multiple performance metrics to database.
+
+        Args:
+            metrics: Mapping of metric_type to value; units come from METRIC_UNITS
+
+        Returns:
+            True if the batch was written
+        """
         try:
             with self.get_connection() as conn:
                 for metric_type, value in metrics.items():
                     if isinstance(value, (int, float)):
                         conn.execute(
-                            """INSERT INTO system_metrics (metric_type, metric_value)
-                               VALUES (?, ?)""",
-                            (metric_type, float(value))
+                            """INSERT INTO system_metrics (metric_type, metric_value, unit)
+                               VALUES (?, ?, ?)""",
+                            (metric_type, float(value), self.METRIC_UNITS.get(metric_type))
                         )
 
                 conn.commit()

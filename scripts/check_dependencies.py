@@ -9,7 +9,8 @@ It provides detailed information about versions and compatibility.
 import sys
 import subprocess
 import importlib
-import pkg_resources
+from importlib.metadata import distributions
+from packaging.requirements import Requirement, InvalidRequirement
 from typing import Dict, List, Tuple, Optional
 import re
 
@@ -43,105 +44,47 @@ class DependencyChecker:
         self._get_installed_packages()
     
     def _load_requirements(self):
-        """Load requirements from requirements.txt file."""
+        """Parse requirements.txt with the same grammar pip uses.
+
+        Each entry becomes a packaging.requirements.Requirement, so bounded
+        specs such as ``ultralytics>=8.4.0,<9`` and trailing comments are
+        read correctly. The previous parser split on the first ``>=`` and
+        kept everything after it as the version.
+        """
         try:
-            with open(self.requirements_file, 'r') as f:
-                lines = f.readlines()
-            
-            for line in lines:
-                line = line.strip()
-                
-                # Skip comments and empty lines
-                if not line or line.startswith('#'):
-                    continue
-                
-                # Parse package name and version requirement
-                if '>=' in line:
-                    package, version = line.split('>=')
-                    self.required_packages[package.strip()] = {
-                        'operator': '>=',
-                        'version': version.strip(),
-                        'original': line
+            with open(self.requirements_file, 'r', encoding='utf-8') as f:
+                for raw in f:
+                    line = raw.split('#', 1)[0].strip()
+                    if not line or line.startswith('-'):
+                        continue
+                    try:
+                        req = Requirement(line)
+                    except InvalidRequirement as e:
+                        print(f"⚠️ Skipping unparseable requirement: {line} ({e})")
+                        continue
+                    self.required_packages[req.name] = {
+                        'specifier': req.specifier,
+                        'version': str(req.specifier) or 'any',
+                        'original': line,
                     }
-                elif '==' in line:
-                    package, version = line.split('==')
-                    self.required_packages[package.strip()] = {
-                        'operator': '==',
-                        'version': version.strip(),
-                        'original': line
-                    }
-                elif '>' in line:
-                    package, version = line.split('>')
-                    self.required_packages[package.strip()] = {
-                        'operator': '>',
-                        'version': version.strip(),
-                        'original': line
-                    }
-                else:
-                    # No version specified
-                    self.required_packages[line.strip()] = {
-                        'operator': None,
-                        'version': None,
-                        'original': line
-                    }
-                    
         except FileNotFoundError:
-            print(f"❌ Requirements file '{self.requirements_file}' not found!")
+            print(f"❌ Requirements file not found: {self.requirements_file}")
             sys.exit(1)
         except Exception as e:
             print(f"❌ Error reading requirements file: {e}")
             sys.exit(1)
-    
+
     def _get_installed_packages(self):
         """Get list of currently installed packages."""
         try:
-            installed = pkg_resources.working_set
-            for package in installed:
-                self.installed_packages[package.project_name.lower()] = package.version
+            for dist in distributions():
+                name = dist.metadata['Name']
+                if name:
+                    key = name.lower().replace('_', '-')
+                    self.installed_packages[key] = dist.version
         except Exception as e:
             print(f"⚠️ Warning: Could not get installed packages list: {e}")
-    
-    def _compare_versions(self, installed_version: str, required_version: str, operator: str) -> bool:
-        """
-        Compare package versions.
-        
-        Args:
-            installed_version: Currently installed version
-            required_version: Required version
-            operator: Comparison operator (>=, ==, >)
-            
-        Returns:
-            True if version requirement is satisfied
-        """
-        try:
-            from packaging import version
-            
-            installed = version.parse(installed_version)
-            required = version.parse(required_version)
-            
-            if operator == '>=':
-                return installed >= required
-            elif operator == '==':
-                return installed == required
-            elif operator == '>':
-                return installed > required
-            else:
-                return True  # No version requirement
-                
-        except ImportError:
-            # Fallback to simple string comparison if packaging is not available
-            if operator == '>=':
-                return installed_version >= required_version
-            elif operator == '==':
-                return installed_version == required_version
-            elif operator == '>':
-                return installed_version > required_version
-            else:
-                return True
-        except Exception:
-            # If version comparison fails, assume it's satisfied
-            return True
-    
+
     def check_dependencies(self) -> Dict[str, List]:
         """
         Check all dependencies and categorize them.
@@ -154,7 +97,7 @@ class DependencyChecker:
         self.satisfied_packages = []
         
         for package_name, requirements in self.required_packages.items():
-            package_lower = package_name.lower()
+            package_lower = package_name.lower().replace('_', '-')
             
             # Handle special cases for built-in modules
             if package_name in ['tkinter', 'sqlite3']:
@@ -181,8 +124,9 @@ class DependencyChecker:
                 installed_version = self.installed_packages[package_lower]
                 
                 # Check version compatibility
-                if requirements['version'] and requirements['operator']:
-                    if self._compare_versions(installed_version, requirements['version'], requirements['operator']):
+                if len(requirements['specifier']) > 0:
+                    spec = requirements['specifier']
+                    if spec.contains(installed_version, prereleases=True):
                         self.satisfied_packages.append({
                             'name': package_name,
                             'installed_version': installed_version,
@@ -194,7 +138,6 @@ class DependencyChecker:
                             'name': package_name,
                             'installed_version': installed_version,
                             'required_version': requirements['version'],
-                            'operator': requirements['operator'],
                             'original': requirements['original'],
                             'status': 'Version outdated'
                         })
@@ -239,7 +182,10 @@ class DependencyChecker:
         if self.outdated_packages:
             print(f"\n⚠️ Outdated Dependencies ({len(self.outdated_packages)}):")
             for pkg in self.outdated_packages:
-                print(f"   📦 {pkg['name']} {pkg['installed_version']} -> {pkg['operator']}{pkg['required_version']} (needs update)")
+                print(
+                    f"   📦 {pkg['name']} {pkg['installed_version']} -> "
+                    f"{pkg['required_version']} (needs update)"
+                )
         
         # Missing packages
         if self.missing_packages:

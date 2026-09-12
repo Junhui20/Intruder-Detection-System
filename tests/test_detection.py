@@ -17,8 +17,8 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from core.detection_engine import DetectionEngine
-from core.face_recognition_system import FaceRecognitionSystem
-from core.animal_recognition_system import AnimalRecognitionSystem
+from core.face_recognition import FaceRecognitionSystem
+from core.animal_recognition import AnimalRecognitionSystem
 from config.detection_config import DetectionConfig
 
 class TestDetectionEngine(unittest.TestCase):
@@ -28,7 +28,7 @@ class TestDetectionEngine(unittest.TestCase):
     def setUpClass(cls):
         """Set up test fixtures."""
         cls.config = DetectionConfig()
-        cls.detection_engine = DetectionEngine(cls.config)
+        cls.detection_engine = DetectionEngine.from_config(cls.config)
         
         # Create test image
         cls.test_image = np.zeros((480, 640, 3), dtype=np.uint8)
@@ -114,18 +114,29 @@ class TestFaceRecognitionSystem(unittest.TestCase):
             self.assertIsInstance(self.face_recognition.known_face_encodings, list)
             self.assertIsInstance(self.face_recognition.known_face_names, list)
     
-    def test_detect_faces_empty_image(self):
-        """Test face detection with empty image."""
+    def test_recognize_faces_with_no_detections(self):
+        """An empty detection list comes back empty, not as an error."""
+        # `detect_faces()` never existed on this class. The real entry point is
+        # recognize_faces(frame, human_detections): YOLO finds the people, this
+        # system only names them.
         empty_image = np.zeros((100, 100, 3), dtype=np.uint8)
-        faces = self.face_recognition.detect_faces(empty_image)
-        
-        self.assertIsInstance(faces, list)
-    
-    def test_detect_faces_test_image(self):
-        """Test face detection with test image."""
-        faces = self.face_recognition.detect_faces(self.test_face_image)
-        
-        self.assertIsInstance(faces, list)
+        results = self.face_recognition.recognize_faces(empty_image, [])
+
+        self.assertIsInstance(results, list)
+        self.assertEqual(len(results), 0)
+
+    def test_recognize_faces_passes_detections_through(self):
+        """With nobody enrolled, detections come back unchanged and intact."""
+        detections = [{'bbox': (10, 10, 90, 90), 'track_id': 1, 'confidence': 0.9}]
+        results = self.face_recognition.recognize_faces(
+            self.test_face_image, detections
+        )
+
+        self.assertIsInstance(results, list)
+        self.assertEqual(len(results), 1)
+        # The bounding box must survive the round trip — this system annotates
+        # detections, it does not replace them.
+        self.assertEqual(results[0]['bbox'], (10, 10, 90, 90))
 
     def test_integrated_opencv_methods(self):
         """Test integrated OpenCV DNN methods."""
@@ -177,19 +188,27 @@ class TestFaceRecognitionSystem(unittest.TestCase):
             # Face encoding might fail with synthetic images
             pass
     
-    def test_load_known_faces_empty_directory(self):
-        """Test loading known faces from empty directory."""
-        # Create temporary empty directory
-        temp_dir = Path("temp_test_faces")
-        temp_dir.mkdir(exist_ok=True)
-        
-        try:
-            result = self.face_recognition.load_known_faces(str(temp_dir))
-            self.assertIsInstance(result, bool)
-        finally:
-            # Clean up
-            if temp_dir.exists():
-                temp_dir.rmdir()
+    def test_load_known_faces_with_nobody_enrolled(self):
+        """Loading an empty roster clears the system rather than failing."""
+        # This used to pass a directory path and expect a bool back.
+        # load_known_faces takes the rows from the whitelist table —
+        # `List[Dict]` with name / image_path / optional face_encodings — and
+        # returns nothing. Handed a string, it iterated the characters and
+        # died on `face_data['name']` with "string indices must be integers".
+        self.face_recognition.load_known_faces([])
+
+        self.assertEqual(self.face_recognition.known_face_encodings, [])
+        self.assertEqual(self.face_recognition.known_face_names, [])
+
+    def test_load_known_faces_skips_an_unreadable_image(self):
+        """A row pointing at a missing file is skipped, not fatal."""
+        self.face_recognition.load_known_faces([
+            {'name': 'Test Person', 'image_path': 'does_not_exist.jpg'},
+        ])
+
+        # Nothing was enrolled, and the call returned normally — a broken row
+        # in the whitelist must not take the recognition system down at start.
+        self.assertEqual(self.face_recognition.known_face_names, [])
 
 class TestAnimalRecognitionSystem(unittest.TestCase):
     """Test cases for animal recognition system."""
@@ -207,40 +226,48 @@ class TestAnimalRecognitionSystem(unittest.TestCase):
         """Test animal recognition system initialization."""
         self.assertIsNotNone(self.animal_recognition)
     
-    def test_identify_animal_empty_image(self):
-        """Test animal identification with empty image."""
+    def test_identify_animals_with_no_detections(self):
+        """An empty detection list comes back empty."""
+        # `identify_animal(image, "dog")` never existed. The real method is
+        # identify_animals(frame, animal_detections) and it takes COCO class
+        # IDs, not species names — 16 is dog, 15 is cat.
         empty_image = np.zeros((100, 100, 3), dtype=np.uint8)
-        result = self.animal_recognition.identify_animal(empty_image, "dog")
-        
-        self.assertIsInstance(result, dict)
-        self.assertIn('identity', result)
-        self.assertIn('confidence', result)
-    
-    def test_identify_animal_test_image(self):
-        """Test animal identification with test image."""
-        result = self.animal_recognition.identify_animal(self.test_animal_image, "cat")
-        
-        self.assertIsInstance(result, dict)
-        self.assertIn('identity', result)
-        self.assertIn('confidence', result)
-        self.assertIsInstance(result['confidence'], (int, float))
-    
-    def test_extract_color_features(self):
-        """Test color feature extraction."""
-        features = self.animal_recognition.extract_color_features(self.test_animal_image)
-        
-        self.assertIsInstance(features, dict)
-        self.assertIn('dominant_color', features)
-        self.assertIn('color_histogram', features)
-    
+        results = self.animal_recognition.identify_animals(empty_image, [])
+
+        self.assertIsInstance(results, list)
+        self.assertEqual(len(results), 0)
+
+    def test_identify_animals_annotates_each_detection(self):
+        """With no pets enrolled, a detection still comes back usable."""
+        detections = [{'bbox': (10, 10, 90, 90), 'class_id': 15, 'confidence': 0.8}]
+        results = self.animal_recognition.identify_animals(
+            self.test_animal_image, detections
+        )
+
+        self.assertIsInstance(results, list)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]['bbox'], (10, 10, 90, 90))
+
+    def test_dominant_colour_is_a_name(self):
+        """Colour identification reports a colour name."""
+        # `extract_color_features()` never existed, and there is no histogram
+        # anywhere in this class. Colour matching works on a single dominant
+        # colour name, which is the 30% component of the hybrid pet score.
+        colour = self.animal_recognition._get_dominant_color(self.test_animal_image)
+
+        self.assertIsInstance(colour, str)
+        self.assertTrue(colour)
+
     def test_supported_animals(self):
-        """Test supported animal types."""
-        supported = self.animal_recognition.get_supported_animals()
-        
-        self.assertIsInstance(supported, list)
+        """The COCO animal classes this system can identify."""
+        # `get_supported_animals()` never existed; the mapping is a public
+        # attribute, keyed by COCO class ID.
+        supported = self.animal_recognition.animal_classes
+
+        self.assertIsInstance(supported, dict)
         self.assertGreater(len(supported), 0)
-        self.assertIn('dog', supported)
-        self.assertIn('cat', supported)
+        self.assertIn('dog', supported.values())
+        self.assertIn('cat', supported.values())
 
 class TestDetectionAccuracy(unittest.TestCase):
     """Test cases for detection accuracy and performance."""
@@ -249,7 +276,7 @@ class TestDetectionAccuracy(unittest.TestCase):
     def setUpClass(cls):
         """Set up test fixtures."""
         cls.config = DetectionConfig()
-        cls.detection_engine = DetectionEngine(cls.config)
+        cls.detection_engine = DetectionEngine.from_config(cls.config)
     
     def test_detection_consistency(self):
         """Test detection consistency across multiple runs."""

@@ -36,6 +36,39 @@ class TestConfigurationSecurity(unittest.TestCase):
         if self.test_dir.exists():
             shutil.rmtree(self.test_dir)
     
+    def test_secret_in_config_file_is_ignored_even_on_the_default_path(self):
+        """A token in the loaded config is reported and not returned."""
+        # The Settings-level test below loads a *custom* config path. The bug
+        # it missed was on the default path: get_secure() read the singleton's
+        # config.yaml as a fallback, warned, and returned the token anyway.
+        manager = EnvironmentConfigManager(
+            config_file=str(self.test_dir / "none.yaml"), env_file=None
+        )
+        manager.config_data = {'telegram': {'bot_token': 'token_from_config_yaml'}}
+        os.environ.pop('TELEGRAM_BOT_TOKEN', None)
+
+        with self.assertLogs('config.env_config', level='WARNING') as logs:
+            value = manager.get_secure(
+                'telegram.bot_token', env_var='TELEGRAM_BOT_TOKEN',
+                config_path='telegram.bot_token', required=False,
+            )
+
+        self.assertIsNone(value)
+        self.assertTrue(any('will be ignored' in line for line in logs.output))
+
+    def test_secret_from_environment_still_wins(self):
+        manager = EnvironmentConfigManager(
+            config_file=str(self.test_dir / "none.yaml"), env_file=None
+        )
+        os.environ['TELEGRAM_BOT_TOKEN'] = 'from_env'
+        try:
+            value = manager.get_secure(
+                'telegram.bot_token', env_var='TELEGRAM_BOT_TOKEN'
+            )
+        finally:
+            del os.environ['TELEGRAM_BOT_TOKEN']
+        self.assertEqual(value, 'from_env')
+
     def test_no_sensitive_data_in_config_file(self):
         """Test that sensitive data is not stored in config files."""
         # Create a test config file with potentially sensitive data

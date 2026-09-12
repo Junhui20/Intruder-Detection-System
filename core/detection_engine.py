@@ -69,6 +69,24 @@ class DetectionEngine:
         
         self._load_model()
     
+    @classmethod
+    def from_config(cls, config) -> "DetectionEngine":
+        """Build an engine from a DetectionConfig.
+
+        Args:
+            config: DetectionConfig carrying the YOLO model path, confidence
+                threshold and optimisation settings.
+
+        Returns:
+            A DetectionEngine configured from those fields.
+        """
+        return cls(
+            model_path=config.yolo_model_path,
+            confidence=config.yolo_confidence,
+            use_optimized_engine=config.use_optimized_engine,
+            optimized_model_dir=config.optimized_model_dir,
+        )
+
     def _load_model(self):
         """Load the YOLO11n model (optimized or standard)."""
         try:
