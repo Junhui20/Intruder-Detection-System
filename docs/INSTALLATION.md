@@ -162,7 +162,8 @@ venv\Scripts\activate     # Windows
 Face recognition runs on InsightFace (`insightface` + `onnxruntime`, both in
 `requirements.txt`). The model pack for your tier (`buffalo_sc` ≈ 15 MB,
 `buffalo_l` ≈ 280 MB) downloads to `~/.insightface/models` on the first run,
-so the first start needs internet. For CUDA inference replace `onnxruntime`
+and the pet re-ID checkpoint (`dinov2-small` 88 MB / `dinov2-base` 346 MB) to
+`~/.cache/huggingface`, so the first start needs internet. For CUDA inference replace `onnxruntime`
 with `onnxruntime-gpu`.
 
 #### 4. OpenCV Installation Issues

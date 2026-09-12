@@ -556,11 +556,9 @@ class EntityManagement:
                 return
 
             # Map animal type to COCO class ID
-            animal_to_coco = {
-                "Dog": 16, "Cat": 17, "Horse": 18, "Sheep": 19,
-                "Cow": 20, "Elephant": 22, "Bear": 23, "Zebra": 24
-            }
-            coco_class_id = animal_to_coco.get(animal_type, 16)  # Default to dog
+            from core.animal_recognition import ANIMAL_CLASSES
+
+            coco_class_id = {v: k for k, v in ANIMAL_CLASSES.items()}.get(animal_type.lower(), 16)
 
             # Create or update animal entry
             animal = WhitelistEntry(

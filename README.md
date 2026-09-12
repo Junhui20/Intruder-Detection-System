@@ -31,7 +31,7 @@ protocol, retention) depends on the hardware.
 | Detection FPS (1 cam, 640 px) | *placeholder* | *placeholder* |
 | Face-ID latency | *placeholder* | *placeholder* |
 | Caption latency | ~65 s (3b, CPU 4 threads) | 14 s (7b spills past 4 GB VRAM); 1.6 s with `captions.model: qwen2.5vl:3b` |
-| Pet re-ID latency | *placeholder* | *placeholder* |
+| Pet re-ID latency (per animal crop) | 66 ms (CPU 4 threads) | 32 ms (base) · 10 ms with small |
 | RAM idle / under load | *placeholder* | *placeholder* |
 | Pi 5 / N100 (real numbers) | *contribute yours* | — |
 
@@ -69,8 +69,9 @@ portfolio piece.
   timer-based alerts for unknown people.
 - **Familiar faces** — enrol people from photos; alerts say who it was.
   InsightFace (SCRFD + ArcFace) on ONNX Runtime, `buffalo_sc` low / `buffalo_l` high.
-- **Your own pet** — enrol a pet from photos; alerts distinguish *your* cat from
-  *a* cat. *(Planned: embedding-based re-ID replacing today's colour heuristic.)*
+- **Your own pet** — enrol a pet from three or more photos; alerts distinguish
+  *your* dog from *a* dog. DINOv2 embeddings, cosine match, `dinov2-small` low /
+  `dinov2-base` high. Numbers and the caveat in [Pet re-ID](#pet-re-id).
 - **Event captions** — a local vision-language model writes one line under each
   alert photo ("Blond woman in a black dress, holding cards, facing the camera").
   Ollama with `qwen2.5vl:3b` (low) / `qwen2.5vl:7b` (high); the photo goes out first,
@@ -85,6 +86,33 @@ portfolio piece.
   tier switch. *(Planned, FastAPI + htmx, replacing the tkinter desktop app.)*
 - **Storage** — SQLite, no server.
 
+## Pet re-ID
+
+Enrol a pet with three or more photos; an animal box from the camera is embedded
+with DINOv2 and matched by cosine similarity against them, best photo wins.
+Evaluated on [DogFaceNet](https://zenodo.org/records/12578449) (CC-BY-4.0: 1,393
+dogs, 8,363 aligned face crops) with the question a home actually asks — *is
+this my pet, or some other dog?* — one enrolled dog against 300 strangers,
+three enrolment photos, seed 0:
+
+| | true-positive rate | at false-accept rate | threshold |
+|---|---|---|---|
+| `dinov2-small` (low) | 92.6 % | 1 % | cosine ≥ 0.66 |
+| `dinov2-base` (high) | 94.2 % | 1 % | cosine ≥ 0.62 |
+| either, looser | 98.6–98.7 % | 5 % | ≥ 0.49–0.54 |
+
+Default threshold is 0.65 (`pet_identification_threshold`). `python bench.py
+pet-eval` downloads the 72 MB set and reproduces the table.
+
+**The gap:** those are web photos of dog faces, aligned and cropped. Your
+camera sees a whole animal from above, in motion, at night. Treat the numbers
+as an upper bound, and enrol photos taken by the camera itself. Cats are
+untested — no freely downloadable individual-cat set was found. The PetFace
+benchmark (257k individuals, 13 families) needs a research-use request form;
+it was not used, and the alternative model considered (AvitoTech's CLIP) was
+trained on it, which is also why it was evaluated here instead — it scored
+78.8 % at 1 % FAR and was dropped.
+
 ## Quick start
 
 ```bash
@@ -97,8 +125,7 @@ python scripts/setup_ollama.py          # optional: installs Ollama + pulls the 
 python main.py                          # add --headless to run without the desktop UI
 ```
 
-Optional extras: `requirements-optional.txt` (MediaPipe, dlib for the legacy pet path),
-`requirements-dev.txt` (pytest, black, flake8). GPU users: `python
+`requirements-dev.txt` adds pytest, black and flake8. GPU users: `python
 scripts/install.py --gpu` installs the CUDA build of PyTorch.
 
 **Linux and Windows** on Python 3.12 and 3.14 are what CI tests; macOS is
@@ -147,7 +174,7 @@ methods.
 | T3 | RTSP first-class | done |
 | T4 | InsightFace face backend (replaces LBPH) | done |
 | T5 | Ollama event captions + setup script | done |
-| T6–T7 | Pet re-ID: model choice, enrol → embed → match, PetFace eval | |
+| T6–T7 | Pet re-ID: model choice, enrol → embed → match, eval | done |
 | T8 | Web UI, delete tkinter | |
 | T9 | Telegram commands, `/enroll` from an alert photo | |
 | T10 | `bench.py` + both tiers' numbers | |

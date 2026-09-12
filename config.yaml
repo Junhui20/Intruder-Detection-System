@@ -10,6 +10,7 @@ camera:
   connection_timeout: 2
 detection:
   face_model: ''  # buffalo_sc | buffalo_l; empty = from tier
+  pet_model: ''  # facebook/dinov2-small | facebook/dinov2-base; empty = from tier
   batch_processing: false
   enable_gpu_acceleration: true
   enable_model_optimization: true
