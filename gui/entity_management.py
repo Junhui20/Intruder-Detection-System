@@ -373,7 +373,7 @@ class EntityManagement:
                 temp_face_system = FaceRecognitionSystem()
 
                 # Use the same method as the main system
-                temp_face_system._load_face_from_image(name, photo_path)
+                temp_face_system.add_known_face(name, photo_path)
 
                 # Extract the encodings that were just loaded
                 if temp_face_system.known_face_encodings:
@@ -754,16 +754,12 @@ class EntityManagement:
             # Create a test face recognition system
             test_system = FaceRecognitionSystem()
 
-            if hasattr(test_system, 'use_opencv_fallback') and test_system.use_opencv_fallback:
-                if hasattr(test_system, 'opencv_face_system') and test_system.opencv_face_system:
-                    status_text = "✅ OpenCV Face Recognition (Working)"
-                    status_color = "green"
-                else:
-                    status_text = "⚠️ OpenCV Face Recognition (Not Available)"
-                    status_color = "orange"
-            else:
-                status_text = "✅ Standard Face Recognition (Working)"
+            if test_system.backend_type == "insightface":
+                status_text = f"✅ InsightFace {test_system.model} (Working)"
                 status_color = "green"
+            else:
+                status_text = "⚠️ InsightFace not available"
+                status_color = "orange"
 
         except Exception as e:
             status_text = f"❌ Face Recognition Error: {str(e)[:50]}..."
@@ -795,7 +791,7 @@ class EntityManagement:
                         temp_face_system = FaceRecognitionSystem()
 
                         # Use the same method as the main system
-                        temp_face_system._load_face_from_image(human.name, human.image_path)
+                        temp_face_system.add_known_face(human.name, human.image_path)
 
                         # Extract the encodings that were just loaded
                         if temp_face_system.known_face_encodings:

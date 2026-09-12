@@ -66,6 +66,7 @@ portfolio piece.
   (cat, dog, horse, sheep, cow, elephant, bear, zebra), configurable thresholds,
   timer-based alerts for unknown people.
 - **Familiar faces** — enrol people from photos; alerts say who it was.
+  InsightFace (SCRFD + ArcFace) on ONNX Runtime, `buffalo_sc` low / `buffalo_l` high.
 - **Your own pet** — enrol a pet from photos; alerts distinguish *your* cat from
   *a* cat. *(Planned: embedding-based re-ID replacing today's colour heuristic.)*
 - **Event captions** — a local vision-language model writes one line per alert
@@ -92,7 +93,7 @@ python scripts/setup_secure_config.py   # writes .env with your Telegram token
 python main.py                          # add --headless to run without the desktop UI
 ```
 
-Optional extras: `requirements-optional.txt` (dlib face encodings, MediaPipe),
+Optional extras: `requirements-optional.txt` (MediaPipe, dlib for the legacy pet path),
 `requirements-dev.txt` (pytest, black, flake8). GPU users: `python
 scripts/install.py --gpu` installs the CUDA build of PyTorch.
 
@@ -138,7 +139,7 @@ methods.
 | T1 | Cleanup + this README skeleton | done |
 | T2 | CI matrix: Ubuntu × Windows × Python 3.12/3.14 | |
 | T3 | RTSP first-class | |
-| T4 | InsightFace face backend (replaces LBPH) | |
+| T4 | InsightFace face backend (replaces LBPH) | done |
 | T5 | Ollama event captions + setup script | |
 | T6–T7 | Pet re-ID: model choice, enrol → embed → match, PetFace eval | |
 | T8 | Web UI, delete tkinter | |

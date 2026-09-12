@@ -423,7 +423,7 @@ CREATE TABLE IF NOT EXISTS system_config (
 DEFAULT_CONFIG = [
     ('yolo_model', 'yolo11n.pt', 'string', 'YOLO11n model file name'),
     ('yolo_confidence', '0.5', 'float', 'YOLO detection confidence threshold'),
-    ('human_confidence_threshold', '0.6', 'float', 'Configurable confidence threshold for human face recognition'),
+    ('human_confidence_threshold', '0.45', 'float', 'Minimum ArcFace cosine similarity to name a face'),
     ('animal_confidence_threshold', '0.6', 'float', 'Configurable confidence threshold for animal detection'),
     ('pet_identification_threshold', '0.7', 'float', 'Confidence threshold for individual pet identification'),
     ('multi_face_detection', '1', 'boolean', 'Enable simultaneous multi-face detection'),

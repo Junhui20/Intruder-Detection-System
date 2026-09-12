@@ -315,7 +315,7 @@ class ConfigManager:
             'detection': {
                 'yolo_confidence': 0.5,
                 'yolo_iou_threshold': 0.4,
-                'human_confidence_threshold': 0.6,
+                'human_confidence_threshold': 0.45,
                 'animal_confidence_threshold': 0.6
             },
             'database': {
