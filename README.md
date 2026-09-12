@@ -8,10 +8,9 @@ animals are matched against the faces and pets you enrolled; every alert goes
 to Telegram with a short caption written by a local vision-language model.
 Nothing leaves your LAN.
 
-> **Status: mid-rework.** The original desktop (tkinter) version is tagged
-> [`v1-tkinter`](../../tree/v1-tkinter). `main` is being evolved in place — one
-> problem per commit. Sections marked *placeholder* are filled in as their
-> work lands; see [Roadmap](#roadmap).
+> Rebuilt in September 2026 from a 2025 tkinter project, one problem per
+> commit, in [ten pull requests](../../pulls?q=is%3Apr+is%3Amerged). The
+> original is tagged [`v1-tkinter`](../../tree/v1-tkinter).
 
 ## Two tiers, two proofs
 
@@ -54,17 +53,25 @@ on a CPU** (69–77 ms vs 34 ms), so they are now only used when a GPU is presen
 
 ## What it costs elsewhere
 
-| | Familiar faces | AI captions | Price (USD) | Price (MYR) |
+| | Familiar faces | AI captions | Price | In Malaysia |
 |---|---|---|---|---|
-| Google Home Premium | paid tier | yes | $10/mo or $100/yr; Advanced $200/yr | *placeholder* |
-| Arlo Secure | Plus tier | yes (Secure 6) | $7.99 single / $12.99 unlimited / Plus $17.99/mo | *placeholder* |
-| Ring Home Premium | yes | Video Descriptions, Premium only | $20/mo, $200/yr | *placeholder* |
-| Blue Iris | via add-on | via add-on | $69.95–$99.95 one-time (Windows NVR) | *placeholder* |
+| Google Home Premium | paid tier | Advanced only | $10/mo, $100/yr; Advanced $20/mo, $200/yr | not sold; ≈ RM407 / RM814 a year |
+| Arlo Secure | Plus only | yes (Secure 6) | $7.99 single / $12.99 unlimited / Plus $17.99/mo | not sold; Plus ≈ RM878 a year |
+| Ring Home Premium | yes | Video Descriptions | $20/mo, $200/yr | not sold; ≈ RM814 a year |
+| TP-Link Tapo Care | Advanced AI tier | yes (summaries) | $3.49 basic / $19.99 Advanced AI per month | sold; RM price only in the app, ≈ RM814 a year at the US rate |
+| EZVIZ CloudPlay | no | no | — | RM16.99–43.49/mo, RM170–435 a year (storage only) |
+| Blue Iris | via add-on | via add-on | $69.95–$99.95 one-time (Windows NVR) | ≈ RM285–407 once |
 | Frigate | yes (0.16+) | yes (0.15+) | free | free |
 | **This project** | yes | yes (local VLM) | **free** | **free** |
 
-USD prices verified September 2026. MYR column and local alternatives
-(Tapo Care, Imou, Ezviz) are *placeholder* pending research.
+For comparison, the hardware to run this locally, bought once: a Raspberry Pi 5
+8 GB is **RM782** (Cytron, official reseller), a new Intel N100 mini PC
+**RM800–1,400** on Shopee. Either costs less than one year of the cheapest
+familiar-faces subscription, and nothing the year after.
+
+USD prices verified September 2026; MYR at 4.07 per USD. Sources, dates and
+the things that could not be verified are in
+[docs/MALAYSIA_PRICES.md](docs/MALAYSIA_PRICES.md).
 
 ## Why not Frigate?
 
@@ -141,7 +148,7 @@ git clone https://github.com/Junhui20/Intruder-Detection-System.git
 cd Intruder-Detection-System
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-python scripts/setup_secure_config.py   # writes .env with your Telegram token
+python scripts/setup_secure_config.py   # writes .env: Telegram token + web UI password
 python scripts/setup_ollama.py          # optional: installs Ollama + pulls the caption model
 WEB_UI_PASSWORD=choose-one python main.py   # web UI on http://<this machine>:8000
 ```
@@ -189,20 +196,13 @@ Conventions are in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): PEP 8 at 88
 columns, absolute imports, Google-style docstrings, type hints on public
 methods.
 
-## Roadmap
+## History
 
-| | Ticket | Status |
-|---|---|---|
-| T1 | Cleanup + this README skeleton | done |
-| T2 | CI matrix: Ubuntu × Windows × Python 3.12/3.14 | done |
-| T3 | RTSP first-class | done |
-| T4 | InsightFace face backend (replaces LBPH) | done |
-| T5 | Ollama event captions + setup script | done |
-| T6–T7 | Pet re-ID: model choice, enrol → embed → match, eval | done |
-| T8 | Web UI, delete tkinter | done |
-| T9 | Telegram commands, `/enroll` from an alert photo | done |
-| T10 | `bench.py` + both tiers' numbers | done |
-| T11–T12 | MYR prices, final README with screenshots | |
+The 2025 version was a Windows tkinter app: dlib faces that rarely installed,
+a colour-name pet matcher that could not fire, no RTSP, no CI, and a headless
+mode that never started detecting. The 2026 rework kept the repo, the database
+and the Telegram bot, and replaced the rest — each pull request fixes one
+problem and says why. Start with the [merged PRs](../../pulls?q=is%3Apr+is%3Amerged).
 
 ## License
 

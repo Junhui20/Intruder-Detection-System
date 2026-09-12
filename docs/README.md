@@ -29,6 +29,7 @@ Welcome to the Intruder Detection System documentation! This folder contains com
 
 ### Project Information
 - **[CHANGELOG.md](CHANGELOG.md)** - Version history and changes
+- **[MALAYSIA_PRICES.md](MALAYSIA_PRICES.md)** - What the cloud alternatives and the local hardware cost in MYR
 
 ## 🎯 Documentation by Use Case
 
