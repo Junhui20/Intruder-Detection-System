@@ -1,6 +1,10 @@
 # Model-size preset: low (CPU-class hardware) or high (a GPU). Per-feature
 # overrides below win over the preset.
 tier: low
+captions:
+  enabled: true
+  model: ''  # qwen2.5vl:3b | qwen2.5vl:7b; empty = from tier. Needs Ollama: python scripts/setup_ollama.py
+  ollama_host: http://localhost:11434
 camera:
   buffer_size: 1
   connection_timeout: 2
