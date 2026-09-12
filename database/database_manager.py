@@ -92,6 +92,12 @@ class DatabaseManager:
                 INSERT OR IGNORE INTO system_config (config_key, config_value, config_type, description)
                 VALUES (?, ?, ?, ?)
             """, (config_key, config_value, config_type, description))
+        # 0.6 was the dlib-era default; as an ArcFace cosine cut-off it rejects
+        # household members. Only the untouched old default is rewritten.
+        conn.execute("""
+            UPDATE system_config SET config_value = '0.45'
+            WHERE config_key = 'human_confidence_threshold' AND config_value = '0.6'
+        """)
     
     def _create_indexes(self, conn: sqlite3.Connection):
         """Create database indexes for better performance."""
