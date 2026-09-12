@@ -134,7 +134,10 @@ class FaceRecognitionSystem:
         """
         names, encodings = [], []
         for row in faces_data:
-            extra = json.loads(row.get("multiple_photos") or "[]")
+            try:
+                extra = json.loads(row.get("multiple_photos") or "[]")
+            except ValueError:
+                extra = []  # a bad row loses its extra photos, not the whole roster
             for path in [row["image_path"], *extra]:
                 image = cv2.imread(path) if self.app and os.path.exists(path) else None
                 embedding = self._embed(image) if image is not None else None

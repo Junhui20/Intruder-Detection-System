@@ -87,13 +87,23 @@ class DatabaseManager:
             raise
     
     def _migrate(self, conn: sqlite3.Connection):
-        """Bring a database created by an older version up to the current schema."""
+        """Bring a database created by an older version up to the current schema, once."""
         columns = {row[1] for row in conn.execute("PRAGMA table_info(devices)")}
         if "url" not in columns:
             conn.execute("ALTER TABLE devices ADD COLUMN url TEXT NOT NULL DEFAULT ''")
         for row in conn.execute("SELECT * FROM devices WHERE url = ''").fetchall():
             device = Device.from_dict(dict(row))  # __post_init__ builds the URL
             conn.execute("UPDATE devices SET url = ? WHERE id = ?", (device.url, device.id))
+        if conn.execute("SELECT 1 FROM system_config WHERE config_key = 'schema_version'").fetchone():
+            return
+        # v1 thresholds were dlib distances and colour scores; as cosine cut-offs they
+        # reject family. Rewritten once — a value set on purpose later is kept.
+        for key, old, new in (("human_confidence_threshold", "0.6", "0.45"),
+                              ("pet_identification_threshold", "0.7", "0.65")):
+            conn.execute("UPDATE system_config SET config_value = ? WHERE config_key = ? AND config_value = ?",
+                         (new, key, old))
+        conn.execute("""INSERT INTO system_config (config_key, config_value, config_type, description)
+                        VALUES ('schema_version', '2', 'integer', 'migrations applied up to this version')""")
 
     def _insert_default_config(self, conn: sqlite3.Connection):
         """Insert default configuration values."""
@@ -102,17 +112,7 @@ class DatabaseManager:
                 INSERT OR IGNORE INTO system_config (config_key, config_value, config_type, description)
                 VALUES (?, ?, ?, ?)
             """, (config_key, config_value, config_type, description))
-        # 0.6 was the dlib-era default; as an ArcFace cosine cut-off it rejects
-        # household members. Only the untouched old default is rewritten.
-        conn.execute("""
-            UPDATE system_config SET config_value = '0.45'
-            WHERE config_key = 'human_confidence_threshold' AND config_value = '0.6'
-        """)
-        conn.execute("""
-            UPDATE system_config SET config_value = '0.65'
-            WHERE config_key = 'pet_identification_threshold' AND config_value = '0.7'
-        """)
-    
+
     def _create_indexes(self, conn: sqlite3.Connection):
         """Create database indexes for better performance."""
         indexes = [
