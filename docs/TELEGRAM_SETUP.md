@@ -176,6 +176,24 @@ telegram:
 [Photo attached]
 ```
 
+### Event captions
+
+When Ollama is running with the tier's vision model (`python scripts/setup_ollama.py`
+installs it and pulls `qwen2.5vl:3b` for low / `qwen2.5vl:7b` for high), every alert
+photo gets a one-line description edited in under it a moment after it arrives:
+
+```
+🚨 Unknown person detected (confidence: 87.0%)
+💬 A man in a dark hoodie crouching by the side gate.
+```
+
+The photo is never delayed by the caption. Measured on a 2020 laptop: `qwen2.5vl:3b`
+1.6 s on the RTX 3050, 65 s on 4 CPU threads; `qwen2.5vl:7b` 14 s on the same
+4 GB card because only 3 of 29 layers fit (it wants ≥ 8 GB VRAM — on a 4 GB card
+set `captions.model: qwen2.5vl:3b`). The model stays loaded (3–6 GB RAM or VRAM)
+so an alert at 3 a.m. does not wait for a cold start. Nothing is sent anywhere but
+`localhost:11434`. Turn it off with `captions.enabled: false` in `config.yaml`.
+
 ### System Status Messages
 ```
 📊 SYSTEM STATUS 📊

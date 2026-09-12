@@ -236,7 +236,7 @@ Your notification settings can be managed through the main application.
     
     def send_notification(self, notification_type: str, message: str, 
                          photo_path: Optional[str] = None, 
-                         force: bool = False) -> bool:
+                         force: bool = False) -> List[Tuple[int, int]]:
         """
         Send notification to all eligible users.
         
@@ -247,9 +247,9 @@ Your notification settings can be managed through the main application.
             force: Skip cooldown check
             
         Returns:
-            True if sent to at least one user
+            (chat_id, message_id) for every message that went out — empty if none did
         """
-        sent_count = 0
+        sent = []
         
         for chat_id, user in self.users.items():
             if user['sendstatus'] != 'open':
@@ -265,41 +265,31 @@ Your notification settings can be managed through the main application.
                 logger.debug(f"Skipping notification to {chat_id} due to cooldown")
                 continue
             
-            # Send notification
-            if self._send_to_user(chat_id, message, photo_path):
-                sent_count += 1
+            message_id = self._send_to_user(chat_id, message, photo_path)
+            if message_id:
+                sent.append((chat_id, message_id))
                 self._update_cooldown(chat_id)
         
-        return sent_count > 0
+        return sent
     
-    def _send_to_user(self, chat_id: int, message: str, photo_path: Optional[str] = None) -> bool:
-        """Send message/photo to a specific user."""
+    def _send_to_user(self, chat_id: int, message: str, photo_path: Optional[str] = None) -> Optional[int]:
+        """Send message/photo to a specific user; returns the message_id."""
         try:
-            success = False
-            
-            # Send photo if provided
             if photo_path and os.path.exists(photo_path):
-                if self.send_photo(chat_id, photo_path, message):
-                    success = True
-                    self.notification_stats['photos_sent'] += 1
+                message_id = self.send_photo(chat_id, photo_path, message)
+                self.notification_stats['photos_sent' if message_id else 'failed_sends'] += 1
             else:
-                # Send text message
-                if self.send_message(chat_id, message):
-                    success = True
-                    self.notification_stats['messages_sent'] += 1
-            
-            if not success:
-                self.notification_stats['failed_sends'] += 1
-            
-            return success
+                message_id = self.send_message(chat_id, message)
+                self.notification_stats['messages_sent' if message_id else 'failed_sends'] += 1
+            return message_id
             
         except Exception as e:
             logger.error(f"Error sending to user {chat_id}: {e}")
             self.notification_stats['failed_sends'] += 1
-            return False
+            return None
     
-    def send_message(self, chat_id: int, message: str) -> bool:
-        """Send text message to a specific chat."""
+    def send_message(self, chat_id: int, message: str) -> Optional[int]:
+        """Send a text message; returns its Telegram message_id, or None."""
         try:
             url = f"{self.base_url}/sendMessage"
             data = {
@@ -314,20 +304,20 @@ Your notification settings can be managed through the main application.
                 result = response.json()
                 if result['ok']:
                     logger.debug(f"Message sent to {chat_id}")
-                    return True
+                    return result['result']['message_id']
                 else:
                     logger.warning(f"Failed to send message to {chat_id}: {result}")
-                    return False
+                    return None
             else:
                 logger.warning(f"HTTP error sending message to {chat_id}: {response.status_code}")
-                return False
+                return None
                 
         except Exception as e:
             logger.error(f"Error sending message to {chat_id}: {e}")
-            return False
+            return None
     
-    def send_photo(self, chat_id: int, photo_path: str, caption: str = "") -> bool:
-        """Send photo to a specific chat."""
+    def send_photo(self, chat_id: int, photo_path: str, caption: str = "") -> Optional[int]:
+        """Send a photo; returns its Telegram message_id, or None."""
         try:
             url = f"{self.base_url}/sendPhoto"
             
@@ -345,16 +335,29 @@ Your notification settings can be managed through the main application.
                 result = response.json()
                 if result['ok']:
                     logger.debug(f"Photo sent to {chat_id}")
-                    return True
+                    return result['result']['message_id']
                 else:
                     logger.warning(f"Failed to send photo to {chat_id}: {result}")
-                    return False
+                    return None
             else:
                 logger.warning(f"HTTP error sending photo to {chat_id}: {response.status_code}")
-                return False
+                return None
                 
         except Exception as e:
             logger.error(f"Error sending photo to {chat_id}: {e}")
+            return None
+    
+
+    def edit_caption(self, chat_id: int, message_id: int, caption: str) -> bool:
+        """Replace the caption under an already-sent photo."""
+        try:
+            data = {'chat_id': chat_id, 'message_id': message_id, 'caption': caption}  # plain text: VLM output has _ and *
+            result = requests.post(f"{self.base_url}/editMessageCaption", data=data, timeout=10).json()
+            if not result['ok']:
+                logger.warning(f"Caption edit refused for {chat_id}/{message_id}: {result.get('description')}")
+            return result['ok']
+        except Exception as e:
+            logger.error(f"Error editing caption for {chat_id}/{message_id}: {e}")
             return False
     
     def _is_in_cooldown(self, chat_id: int) -> bool:
