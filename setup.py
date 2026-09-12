@@ -12,7 +12,7 @@ import subprocess
 
 def main():
     """Main setup function."""
-    print("🚀 Intruder Detection System 2025 - Quick Setup")
+    print("🚀 Intruder Detection System - Quick Setup")
     print("=" * 55)
     
     # Check if we're in the right directory

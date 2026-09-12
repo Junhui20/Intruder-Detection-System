@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Intruder Detection System 2025 - Main Entry Point
+Intruder Detection System - Main Entry Point
 
 Advanced intruder detection system with YOLO11n, individual pet recognition,
 and comprehensive Telegram integration.
@@ -11,7 +11,7 @@ Features:
 - Individual pet identification (e.g., 'Jacky') using hybrid approach
 - IP camera support with HTTP/HTTPS and local fallback
 - Bidirectional Telegram bot with command listening
-- SQLite database (migrated from MariaDB)
+- SQLite database
 - Modern GUI with 5 specialized modules
 - Real-time performance monitoring
 
@@ -362,7 +362,7 @@ class IntruderDetectionSystem:
     def _initialize_gui(self) -> bool:
         """Initialize graphical user interface."""
         try:
-            self.gui = MainWindow("Intruder Detection System 2025")
+            self.gui = MainWindow("Intruder Detection System")
             
             # Set up GUI callbacks
             self.gui.set_callback('start_detection', self.start_detection)
@@ -1232,11 +1232,10 @@ class IntruderDetectionSystem:
 
 def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(description="Intruder Detection System 2025")
+    parser = argparse.ArgumentParser(description="Intruder Detection System")
     parser.add_argument("--config", default="config.yaml", help="Configuration file path")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], help="Logging level")
     parser.add_argument("--headless", action="store_true", help="Run without GUI")
-    parser.add_argument("--migrate", action="store_true", help="Migrate from MariaDB to SQLite")
     
     args = parser.parse_args()
     
@@ -1244,19 +1243,8 @@ def main():
     setup_logging(log_level=args.log_level)
     
     logger.info("=" * 60)
-    logger.info("Intruder Detection System 2025 - Starting")
+    logger.info("Intruder Detection System - Starting")
     logger.info("=" * 60)
-    
-    # Handle migration if requested
-    if args.migrate:
-        logger.info("Starting database migration from MariaDB to SQLite...")
-        from database.migrations.mariadb_to_sqlite import run_migration
-        success = run_migration()
-        if success:
-            logger.info("Migration completed successfully")
-        else:
-            logger.error("Migration failed")
-        return
     
     # Create and initialize system
     system = IntruderDetectionSystem(args.config)
