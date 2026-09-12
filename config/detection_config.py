@@ -33,11 +33,8 @@ class DetectionConfig:
     yolo_device: str = "auto"  # auto, cpu, cuda:0, etc.
     
     # Face Recognition Configuration (User Configurable)
-    human_confidence_threshold: float = 0.6
-    face_recognition_model: str = "hog"  # hog or cnn
-    face_recognition_tolerance: float = 0.6
+    human_confidence_threshold: float = 0.45  # ArcFace cosine similarity; strangers score < 0.2
     max_faces_per_frame: int = 10
-    face_detection_method: str = "hog"  # hog, cnn, or auto
     
     # Animal Recognition Configuration (User Configurable)
     animal_confidence_threshold: float = 0.6
@@ -108,10 +105,7 @@ class DetectionConfig:
         """Get face recognition configuration."""
         return {
             'confidence_threshold': self.human_confidence_threshold,
-            'model': self.face_recognition_model,
-            'tolerance': self.face_recognition_tolerance,
             'max_faces': self.max_faces_per_frame,
-            'detection_method': self.face_detection_method
         }
     
     def get_animal_recognition_config(self) -> Dict[str, Any]:
@@ -164,13 +158,6 @@ class DetectionConfig:
         if not 0.0 <= self.person_tracking_iou_threshold <= 1.0:
             errors['person_tracking_iou_threshold'] = "Person tracking IoU must be between 0.0 and 1.0"
         
-        # Validate face recognition settings
-        if self.face_recognition_model not in ['hog', 'cnn']:
-            errors['face_recognition_model'] = "Face recognition model must be 'hog' or 'cnn'"
-        
-        if self.face_detection_method not in ['hog', 'cnn', 'auto']:
-            errors['face_detection_method'] = "Face detection method must be 'hog', 'cnn', or 'auto'"
-        
         # Validate pet identification method
         if self.pet_identification_method not in ['color', 'face', 'hybrid']:
             errors['pet_identification_method'] = "Pet identification method must be 'color', 'face', or 'hybrid'"
@@ -203,8 +190,6 @@ class DetectionConfig:
             # CPU-only optimizations
             self.enable_gpu_acceleration = False
             self.yolo_device = "cpu"
-            self.face_recognition_model = "hog"  # Faster on CPU
-            self.face_detection_method = "hog"
             self.max_faces_per_frame = 5  # Reduce load
             self.enable_tensorrt = False
             self.batch_processing = False
@@ -222,8 +207,6 @@ class DetectionConfig:
             # High-end GPU optimizations
             self.enable_tensorrt = True
             self.enable_quantization = False
-            self.face_recognition_model = "cnn"  # More accurate
-            self.face_detection_method = "cnn"
             self.max_faces_per_frame = 15
             self.batch_processing = True
             logger.info("Optimized configuration for high-end GPU")

@@ -42,7 +42,7 @@ from config.detection_config import DetectionConfig
 from config.camera_config import CameraConfigManager
 from database.database_manager import DatabaseManager
 from core.detection_engine import DetectionEngine
-from core.face_recognition import FaceRecognitionSystem
+from core.face_recognition import TIER_MODELS, FaceRecognitionSystem
 from core.animal_recognition import AnimalRecognitionSystem
 from core.camera_manager import CameraManager
 from core.notification_system import NotificationSystem
@@ -174,6 +174,9 @@ class IntruderDetectionSystem:
             # Validate critical settings
             if not self._validate_critical_settings():
                 return False
+            for key, problem in self.settings.validate_settings().items():
+                logger.error(f"config.yaml: {key}: {problem}")
+                return False
 
             # Load detection configuration
             self.detection_config = DetectionConfig()
@@ -236,7 +239,9 @@ class IntruderDetectionSystem:
             # Initialize face recognition system
             self.face_recognition = FaceRecognitionSystem(
                 confidence_threshold=self.detection_config.human_confidence_threshold,
-                max_faces_per_frame=self.detection_config.max_faces_per_frame
+                max_faces_per_frame=self.detection_config.max_faces_per_frame,
+                model=self.settings.face_model or TIER_MODELS[self.settings.tier],
+                use_gpu=self.settings.enable_gpu,
             )
             
             # Load known faces from database

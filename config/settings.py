@@ -25,10 +25,14 @@ class Settings:
     All settings are configurable via GUI and stored in database.
     """
     
+    # Model-size preset; per-feature overrides win over it
+    tier: str = "low"  # low or high
+    face_model: str = ""  # InsightFace pack; empty = TIER_MODELS[tier]
+
     # Detection settings (user configurable)
     yolo_model: str = "yolo11n.pt"
     yolo_confidence: float = 0.5
-    human_confidence_threshold: float = 0.6  # User configurable via GUI
+    human_confidence_threshold: float = 0.45  # ArcFace cosine similarity
     animal_confidence_threshold: float = 0.6  # User configurable via GUI
     pet_identification_threshold: float = 0.7  # For individual pet recognition
     
@@ -352,6 +356,9 @@ class Settings:
         """
         errors = {}
         
+        if self.tier not in ('low', 'high'):
+            errors['tier'] = "Must be 'low' or 'high'"
+
         # Validate confidence thresholds
         if not 0.0 <= self.human_confidence_threshold <= 1.0:
             errors['human_confidence_threshold'] = "Must be between 0.0 and 1.0"

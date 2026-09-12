@@ -87,128 +87,69 @@ class TestDetectionEngine(unittest.TestCase):
         self.assertIsInstance(detections, dict)
 
 class TestFaceRecognitionSystem(unittest.TestCase):
-    """Test cases for face recognition system."""
-    
+    """Face recognition against the sample images InsightFace ships."""
+
     @classmethod
     def setUpClass(cls):
-        """Set up test fixtures."""
-        cls.face_recognition = FaceRecognitionSystem()
-        
-        # Create test face image (simple rectangle)
-        cls.test_face_image = np.zeros((150, 150, 3), dtype=np.uint8)
-        cv2.rectangle(cls.test_face_image, (25, 25), (125, 125), (255, 255, 255), -1)
-    
-    def test_face_recognition_initialization(self):
-        """Test face recognition system initialization."""
-        self.assertIsNotNone(self.face_recognition)
+        cls.face_recognition = FaceRecognitionSystem(use_gpu=False)
+        if cls.face_recognition.backend_type != "insightface":
+            raise unittest.SkipTest("insightface not installed or its model pack unavailable")
+        import insightface.data
+        from insightface.data import get_image
 
-        # Test backend initialization
-        self.assertIn(self.face_recognition.backend_type, ["face_recognition", "opencv_dnn_lbph", "opencv_basic", "none"])
+        # Tom_Hanks_54745 is a tight 112x112 crop — enrolling it exercises the
+        # pad-and-retry path. t1 is a group photo of six other people.
+        cls.hanks_path = os.path.join(os.path.dirname(insightface.data.__file__), "images", "Tom_Hanks_54745.png")
+        cls.hanks = get_image("Tom_Hanks_54745")
+        cls.strangers = get_image("t1")
 
-        # Test backend-specific attributes
-        if self.face_recognition.backend_type == "opencv_dnn_lbph":
-            self.assertIsNotNone(self.face_recognition.face_recognizer)
-            self.assertIsInstance(self.face_recognition.known_faces, list)
-            self.assertIsInstance(self.face_recognition.label_to_name, dict)
-        elif self.face_recognition.backend_type == "face_recognition":
-            self.assertIsInstance(self.face_recognition.known_face_encodings, list)
-            self.assertIsInstance(self.face_recognition.known_face_names, list)
-    
-    def test_recognize_faces_with_no_detections(self):
-        """An empty detection list comes back empty, not as an error."""
-        # `detect_faces()` never existed on this class. The real entry point is
-        # recognize_faces(frame, human_detections): YOLO finds the people, this
-        # system only names them.
-        empty_image = np.zeros((100, 100, 3), dtype=np.uint8)
-        results = self.face_recognition.recognize_faces(empty_image, [])
-
-        self.assertIsInstance(results, list)
-        self.assertEqual(len(results), 0)
-
-    def test_recognize_faces_passes_detections_through(self):
-        """With nobody enrolled, detections come back unchanged and intact."""
-        detections = [{'bbox': (10, 10, 90, 90), 'track_id': 1, 'confidence': 0.9}]
-        results = self.face_recognition.recognize_faces(
-            self.test_face_image, detections
-        )
-
-        self.assertIsInstance(results, list)
-        self.assertEqual(len(results), 1)
-        # The bounding box must survive the round trip — this system annotates
-        # detections, it does not replace them.
-        self.assertEqual(results[0]['bbox'], (10, 10, 90, 90))
-
-    def test_integrated_opencv_methods(self):
-        """Test integrated OpenCV DNN methods."""
-        if self.face_recognition.backend_type == "opencv_dnn_lbph":
-            # Test face detection methods
-            test_image = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
-            gray_image = np.random.randint(0, 255, (480, 640), dtype=np.uint8)
-
-            # Test DNN face detection (if available)
-            if hasattr(self.face_recognition, 'face_net') and self.face_recognition.face_net is not None:
-                faces = self.face_recognition._detect_faces_dnn(test_image)
-                self.assertIsInstance(faces, list)
-
-            # Test Haar cascade detection
-            if hasattr(self.face_recognition, 'face_cascade'):
-                faces = self.face_recognition._detect_faces_haar(gray_image)
-                self.assertIsInstance(faces, list)
-
-            # Test face preprocessing
-            face_roi = gray_image[100:200, 100:200]
-            processed = self.face_recognition._preprocess_face(face_roi)
-            self.assertIsInstance(processed, np.ndarray)
-
-            # Test face quality assessment
-            quality = self.face_recognition._assess_face_quality(face_roi)
-            self.assertIsInstance(quality, float)
-            self.assertGreaterEqual(quality, 0.0)
-            self.assertLessEqual(quality, 1.0)
-
-    def test_face_recognition_with_no_known_faces(self):
-        """Test face recognition with no known faces."""
-        test_image = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
-        human_detections = [{'bbox': [100, 100, 200, 200], 'confidence': 0.8, 'track_id': 1}]
-
-        results = self.face_recognition.recognize_faces(test_image, human_detections)
-
-        # Should return the same detections without face recognition
-        self.assertEqual(len(results), 1)
-        self.assertNotIn('identity', results[0])  # No identity should be assigned
-
-    def test_encode_face(self):
-        """Test face encoding."""
-        # This test might not work with synthetic images
-        try:
-            encoding = self.face_recognition.encode_face(self.test_face_image)
-            if encoding is not None:
-                self.assertIsInstance(encoding, np.ndarray)
-        except Exception:
-            # Face encoding might fail with synthetic images
-            pass
-    
-    def test_load_known_faces_with_nobody_enrolled(self):
-        """Loading an empty roster clears the system rather than failing."""
-        # This used to pass a directory path and expect a bool back.
-        # load_known_faces takes the rows from the whitelist table —
-        # `List[Dict]` with name / image_path / optional face_encodings — and
-        # returns nothing. Handed a string, it iterated the characters and
-        # died on `face_data['name']` with "string indices must be integers".
+    def setUp(self):
         self.face_recognition.load_known_faces([])
+        self.face_recognition.track_identities.clear()
 
-        self.assertEqual(self.face_recognition.known_face_encodings, [])
-        self.assertEqual(self.face_recognition.known_face_names, [])
+    def in_frame(self, face):
+        """A 480x640 frame with ``face`` pasted at (100, 100), and its person box."""
+        frame = np.full((480, 640, 3), 90, dtype=np.uint8)
+        h, w = face.shape[:2]
+        frame[100:100 + h, 100:100 + w] = face
+        return frame, [{"bbox": (80, 80, 120 + w, 120 + h), "track_id": 1}]
+
+    def test_recognize_faces_with_no_detections(self):
+        self.assertEqual(self.face_recognition.recognize_faces(self.strangers, []), [])
+
+    def test_nobody_enrolled_leaves_detections_untouched(self):
+        detections = [{"bbox": (10, 10, 90, 90), "track_id": 1, "confidence": 0.9}]
+        results = self.face_recognition.recognize_faces(self.strangers, detections)
+        self.assertEqual(results, [{"bbox": (10, 10, 90, 90), "track_id": 1, "confidence": 0.9}])
 
     def test_load_known_faces_skips_an_unreadable_image(self):
-        """A row pointing at a missing file is skipped, not fatal."""
-        self.face_recognition.load_known_faces([
-            {'name': 'Test Person', 'image_path': 'does_not_exist.jpg'},
-        ])
-
-        # Nothing was enrolled, and the call returned normally — a broken row
-        # in the whitelist must not take the recognition system down at start.
+        self.face_recognition.load_known_faces([{"name": "Nobody", "image_path": "does_not_exist.jpg"}])
         self.assertEqual(self.face_recognition.known_face_names, [])
+
+    def test_enrolled_person_is_named_and_strangers_are_not(self):
+        self.assertTrue(self.face_recognition.add_known_face("Tom Hanks", self.hanks_path))
+
+        frame, detections = self.in_frame(self.hanks)
+        result = self.face_recognition.recognize_faces(frame, detections)[0]
+        self.assertEqual(result["identity"], "Tom Hanks")
+        self.assertGreater(result["face_confidence"], self.face_recognition.confidence_threshold)
+
+        faces = self.face_recognition.app.get(self.strangers)
+        detections = [{"bbox": tuple(int(v) for v in f.bbox), "track_id": i + 10} for i, f in enumerate(faces)]
+        for result in self.face_recognition.recognize_faces(self.strangers, detections):
+            self.assertEqual(result["identity"], "Unknown")
+
+    def test_identity_survives_frames_without_a_face_then_expires(self):
+        self.face_recognition.add_known_face("Tom Hanks", self.hanks_path)
+        frame, detections = self.in_frame(self.hanks)
+        self.face_recognition.recognize_faces(frame, detections)
+
+        blank = np.zeros_like(frame)
+        for _ in range(self.face_recognition.max_misses):
+            held = self.face_recognition.recognize_faces(blank, [{"bbox": (0, 0, 50, 50), "track_id": 1}])[0]
+            self.assertEqual(held["identity"], "Tom Hanks")
+        gone = self.face_recognition.recognize_faces(blank, [{"bbox": (0, 0, 50, 50), "track_id": 1}])[0]
+        self.assertEqual(gone["identity"], "Unknown")
 
 class TestAnimalRecognitionSystem(unittest.TestCase):
     """Test cases for animal recognition system."""

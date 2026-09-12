@@ -163,11 +163,11 @@ class EnvironmentSetup:
         """Verify that required dependencies are installed."""
         print("🔍 Verifying dependencies...")
         
-        # face-recognition is optional (requirements-optional.txt); the
-        # recogniser falls back to OpenCV without it.
         required_packages = [
             'opencv-python',
             'ultralytics',
+            'insightface',
+            'onnxruntime',
             'pillow',
             'numpy',
             'psutil',
