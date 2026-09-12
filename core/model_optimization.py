@@ -259,8 +259,10 @@ class ModelOptimizer:
         """
         available_models = self._find_available_models()
 
-        if not available_models:
-            # Fallback to base model
+        # On a CPU the exported formats are slower than the .pt (bench.py, 4 threads:
+        # .pt 34 ms, fp16 ONNX 69 ms, fp32 ONNX 77 ms); they only pay off on a GPU.
+        if not available_models or not torch.cuda.is_available():
+            logger.info(f"Selected optimal model: pytorch ({self.base_model_path})")
             return 'pytorch', self.base_model_path
 
         # Sort by priority (highest first)

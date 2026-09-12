@@ -202,3 +202,6 @@ logs/
 data/**/*.jpg
 data/**/*.jpeg
 data/**/*.png
+
+# Downloaded by bench.py for the YOLO11n-vs-YOLO26n comparison
+models/yolo26n.pt
