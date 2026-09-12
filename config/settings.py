@@ -112,14 +112,8 @@ class Settings:
                 with open(config_path, 'r') as f:
                     config_data = yaml.safe_load(f) or {}
 
-                # Apply config file values.
-                #
-                # A nested key is tried as both `key` and `section_key`: the
-                # YAML nests as `database: path:` while the attribute is
-                # `database_path`, so leaf-name matching alone silently
-                # dropped it and every custom database path in config.yaml was
-                # ignored in favour of the default. Leaf name first, so
-                # existing files that already match directly are unaffected.
+                # A nested key matches either `key` or `section_key`
+                # (`database: path:` -> `database_path`). Leaf name first.
                 for section, values in config_data.items():
                     if isinstance(values, dict):
                         for key, value in values.items():
@@ -144,13 +138,9 @@ class Settings:
     def _load_from_environment(self):
         """Load settings from environment variables with proper type conversion."""
         # Secure settings (prioritize environment variables)
-        # NO `or self.bot_token` fallback. This method's own docstring says
-        # sensitive data comes from the environment, but the config-file loop
-        # above has already setattr'd every matching key onto `settings` — so
-        # the fallback meant a token committed in config.yaml was picked up
-        # and used, silently, exactly as if it had been supplied securely.
-        # An unset environment variable now leaves the token empty, which is a
-        # visible failure instead of an invisible one.
+        # Environment only. The config-file loop above may have setattr'd a
+        # token from the file; it is discarded here rather than kept as a
+        # fallback, and get_secure_config no longer reads the file either.
         self.bot_token = get_secure_config("telegram.bot_token", env_var="TELEGRAM_BOT_TOKEN",
                                          config_path="telegram.bot_token", required=False) or ""
 

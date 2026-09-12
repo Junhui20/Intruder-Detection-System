@@ -12,7 +12,7 @@ from collections import deque
 from datetime import datetime
 import logging
 
-from .gpu_probe import gpu_available, gpu_load_percent, gpu_memory_percent
+from utils.gpu_probe import gpu_available, gpu_load_percent, gpu_memory_percent
 
 GPU_AVAILABLE = gpu_available()
 
@@ -377,8 +377,6 @@ class ResourceMonitor:
             
             # GPU usage (if available)
             if GPU_AVAILABLE:
-                # Already whole percent — GPUtil's 0-1 load/memoryUtil and the
-                # `* 100` that went with them are gone.
                 load = gpu_load_percent()
                 memory = gpu_memory_percent()
                 if load is not None:

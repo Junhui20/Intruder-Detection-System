@@ -329,18 +329,15 @@ class ErrorRecoveryManager:
                 from config.detection_config import DetectionConfig
                 
                 config = DetectionConfig()
-                # Keyword arguments, matching main.py. This used to pass the
-                # config as the first positional argument, which is
-                # `model_path: str` — so YOLO() was handed a DetectionConfig
-                # repr as a filename. The engine swallows that failure
-                # internally and this method returned True, so recovery
-                # reported success and left a detection engine with no model.
-                self.main_system.detection_engine = DetectionEngine(
-                    model_path=config.yolo_model_path,
-                    confidence=config.yolo_confidence,
-                    use_optimized_engine=config.use_optimized_engine,
-                    optimized_model_dir=config.optimized_model_dir,
-                )
+                # Same two steps main.py takes, or recovery silently reverts to
+                # the default model and thresholds.
+                if getattr(self.main_system, "db_manager", None):
+                    config.update_from_database(self.main_system.db_manager)
+                engine = DetectionEngine.from_config(config)
+                if engine.model is None:
+                    logger.error("Detection engine recovery failed: model did not load")
+                    return False
+                self.main_system.detection_engine = engine
                 return True
             
             return False

@@ -35,9 +35,7 @@ class DatabaseManager:
     - Error handling and recovery
     """
 
-    # Units for the metrics the system records, recovered from the shadowed
-    # duplicate of log_performance_metrics. Anything not listed is stored
-    # with a NULL unit, which is what every metric used to get.
+    # Units for the metrics the system records; unlisted types store NULL.
     METRIC_UNITS = {
         'fps': 'fps',
         'cpu_usage': '%',
@@ -782,9 +780,6 @@ class DatabaseManager:
             stats = {}
             with self.get_connection() as conn:
                 # Get table counts
-                # 'system_config' is here because the shadowed duplicate of
-                # this method counted it and this one did not — the surviving
-                # definition was the poorer of the two.
                 tables = ['devices', 'whitelist', 'notification_settings',
                           'detection_logs', 'system_metrics', 'system_config']
 
@@ -801,11 +796,15 @@ class DatabaseManager:
 
     def get_recent_detections(self, limit: int = 50,
                               detection_type: str = None) -> List[DetectionLog]:
-        """Get recent detection logs, optionally of one type only.
+        """
+        Get recent detection logs, optionally of one type only.
 
-        The filter comes from the shadowed duplicate of this method. The
-        surviving one could only ever return everything, so a caller asking
-        for 'human' silently got animals too.
+        Args:
+            limit: Maximum rows to return, newest first
+            detection_type: 'human' or 'animal' to filter; None for all
+
+        Returns:
+            List of DetectionLog rows
         """
         try:
             with self.get_connection() as conn:
@@ -925,13 +924,15 @@ class DatabaseManager:
             return {}
 
     def get_recent_metrics(self, metric_type: str = None, limit: int = 100) -> List[SystemMetrics]:
-        """Get recent system metrics from database.
+        """
+        Get recent system metrics from database.
 
-        Returns SystemMetrics objects, not dicts: gui/performance_monitor.py
-        reads `metric.recorded_at` and `metric.metric_value` off these. The
-        shadowed duplicate of this method returned objects; this one returned
-        `to_dict()`, so the performance panel raised AttributeError the moment
-        it tried to draw the FPS list.
+        Args:
+            metric_type: Metric name to filter on; None for all
+            limit: Maximum rows to return, newest first
+
+        Returns:
+            List of SystemMetrics objects (the GUI reads attributes off them)
         """
         try:
             with self.get_connection() as conn:
@@ -960,12 +961,14 @@ class DatabaseManager:
             return []
 
     def log_performance_metrics(self, metrics: Dict[str, float]) -> bool:
-        """Log multiple performance metrics to database.
+        """
+        Log multiple performance metrics to database.
 
-        Units come from the shadowed duplicate of this method, which mapped
-        them before delegating to log_system_metric. This one inserted
-        straight into the table and never set the column, so every metric
-        recorded by the running system had a NULL unit.
+        Args:
+            metrics: Mapping of metric_type to value; units come from METRIC_UNITS
+
+        Returns:
+            True if the batch was written
         """
         try:
             with self.get_connection() as conn:
