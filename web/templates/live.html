@@ -1,8 +1,9 @@
 {% extends "base.html" %}{% block title %}Live{% endblock %}{% block body %}
 <div class="grid two">
   <div class="panel">
-    <div class="hd">{{ title }}
+    <div class="hd"><span class="name">{{ title }}</span>
       {% if strip.detecting %}<span class="pill ok">live</span>{% else %}<span class="pill">stopped</span>{% endif %}
+      {% if cameras|length > 1 %}<span class="r"><select class="btn sm" id="cam-pick" aria-label="camera">{% for c in cameras %}<option value="{{ c.id }}" {{ 'selected' if c.id == active }}>{{ c.name or 'Camera ' ~ c.id }}</option>{% endfor %}</select></span>{% endif %}
     </div>
     <div class="video {{ '' if strip.detecting else 'off' }}" id="video">
       {% if strip.detecting %}<img src="/stream" alt="live view" style="width:100%;height:100%;object-fit:contain;display:block">{% endif %}
