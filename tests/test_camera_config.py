@@ -36,6 +36,14 @@ class TestCameraUrls(unittest.TestCase):
         self.assertEqual(config.to_dict()["url"], "rtsp://cam:554/stream1")
         self.assertEqual(config.validate(), {})
 
+    def test_usb_webcam_is_a_camera_too(self):
+        self.assertEqual(build_camera_url("usb", "1"), "usb:1")
+        self.assertEqual(CameraConfig(url="usb:0").validate(), {})
+        self.assertIn("url", CameraConfig(url="usb:front").validate())
+        with mock.patch("core.camera_manager.cv2.VideoCapture") as capture:
+            open_stream("usb:0")
+            capture.assert_called_once_with(0)
+
     def test_validation_rejects_unknown_schemes(self):
         self.assertIn("url", CameraConfig(url="ftp://cam/stream").validate())
         self.assertIn("protocol", CameraConfig(protocol="onvif").validate())

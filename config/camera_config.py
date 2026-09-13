@@ -12,7 +12,7 @@ from urllib.parse import quote, urlsplit
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PORTS = {"http": 8080, "https": 8080, "rtsp": 554}
+DEFAULT_PORTS = {"http": 8080, "https": 8080, "rtsp": 554, "usb": 0}
 
 
 def build_camera_url(
@@ -22,8 +22,8 @@ def build_camera_url(
     Assemble a stream URL from form fields.
 
     Args:
-        protocol: ``http``, ``https`` or ``rtsp``.
-        host: IP address or hostname.
+        protocol: ``http``, ``https``, ``rtsp``, or ``usb`` for a webcam on this machine.
+        host: IP address or hostname; the device index for ``usb``.
         port: 0 picks the protocol default (8080 for DroidCam-style HTTP, 554 for RTSP).
         path: Stream path, e.g. ``/video`` (DroidCam) or ``/stream1`` (Tapo).
         username: Optional; credentials are URL-encoded.
@@ -32,6 +32,8 @@ def build_camera_url(
     Returns:
         The URL, e.g. ``rtsp://admin:pw@192.168.1.20:554/stream1``.
     """
+    if protocol == "usb":  # a webcam plugged into this machine: usb:0, usb:1 ...
+        return f"usb:{host or 0}"
     auth = f"{quote(username, safe='')}:{quote(password, safe='')}@" if username else ""
     port = port or DEFAULT_PORTS[protocol]
     path = "/" + path.lstrip("/") if path else ""
@@ -123,8 +125,11 @@ class CameraConfig:
         
         if self.url:
             parts = urlsplit(self.url)
-            if parts.scheme not in DEFAULT_PORTS or not parts.hostname:
-                errors['url'] = "URL must be http(s)://host[:port]/path or rtsp://host[:port]/path"
+            if parts.scheme == "usb":
+                if not self.url[4:].isdigit():
+                    errors['url'] = "USB cameras are usb:0, usb:1 ..."
+            elif parts.scheme not in DEFAULT_PORTS or not parts.hostname:
+                errors['url'] = "URL must be http(s)://host[:port]/path, rtsp://host[:port]/path or usb:0"
             return errors
 
         if self.protocol not in DEFAULT_PORTS:
