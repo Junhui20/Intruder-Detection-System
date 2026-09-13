@@ -103,9 +103,13 @@ portfolio piece.
 - **Telegram** — alerts with photo and caption; `/status`, `/snapshot`,
   `/arm`, `/disarm`, `/mute 1h`; and `/enroll Name` as a reply to an alert
   photo, which makes that person or pet family without opening a browser.
-- **Web UI** — live view (MJPEG), event history with the alert photos,
-  enrol / forget people and pets, add / test / remove cameras, tier switch.
-  FastAPI + Jinja2 + htmx, no build step, one password, LAN only.
+- **Web UI** — live view with per-feature toggles, snapshot, and *enrol from
+  this frame* (tap a box on the current picture); events with the alert photos
+  and their captions; people and pets as cards with a *Test* button that scores
+  the current frame against them; cameras added, edited and tested in place;
+  Telegram recipients and delivery; the settings that matter, applied live; a
+  status page. FastAPI + Jinja2 + 200 lines of JS, no build step, one password,
+  LAN only, fits a phone.
 - **Storage** — SQLite, no server.
 
 ## Pet re-ID
@@ -139,7 +143,9 @@ trained on it, which is also why it was evaluated here instead — it scored
 
 ![Live view](docs/img/web-live.png)
 
-![Cameras](docs/img/web-cameras.png)
+![People and pets](docs/img/web-people.png)
+
+<img src="docs/img/web-phone.png" alt="Live view on a phone" width="300">
 
 ## Quick start
 

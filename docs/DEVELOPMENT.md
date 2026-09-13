@@ -49,9 +49,9 @@ core/
 
 ```
 web/
-├── app.py          # FastAPI routes, HTTP Basic auth, MJPEG stream
-├── templates/      # Jinja2 pages: live, events, people, pets, cameras, telegram
-└── static/         # htmx (vendored) and one stylesheet
+├── app.py          # FastAPI routes, HTTP Basic auth, MJPEG stream, JSON actions
+├── templates/      # Jinja2 pages: live, events, people, cameras, telegram, settings, status
+└── static/         # app.js (modals, toasts, every button) and one stylesheet
 ```
 
 Starts only when `WEB_UI_PASSWORD` is set; see `web.serve()`.

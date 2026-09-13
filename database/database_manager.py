@@ -88,9 +88,11 @@ class DatabaseManager:
     
     def _migrate(self, conn: sqlite3.Connection):
         """Bring a database created by an older version up to the current schema, once."""
-        columns = {row[1] for row in conn.execute("PRAGMA table_info(devices)")}
-        if "url" not in columns:
-            conn.execute("ALTER TABLE devices ADD COLUMN url TEXT NOT NULL DEFAULT ''")
+        for table, column, decl in (("devices", "url", "TEXT NOT NULL DEFAULT ''"),
+                                    ("devices", "name", "TEXT NOT NULL DEFAULT ''"),
+                                    ("detection_logs", "caption", "TEXT")):
+            if column not in {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
         for row in conn.execute("SELECT * FROM devices WHERE url = ''").fetchall():
             device = Device.from_dict(dict(row))  # __post_init__ builds the URL
             conn.execute("UPDATE devices SET url = ? WHERE id = ?", (device.url, device.id))
@@ -217,9 +219,9 @@ class DatabaseManager:
         try:
             with self.get_connection() as conn:
                 cursor = conn.execute("""
-                    INSERT INTO devices (url, ip_address, port, use_https, end_with_video, status)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (device.url, device.ip_address, device.port, device.use_https, 
+                    INSERT INTO devices (url, name, ip_address, port, use_https, end_with_video, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (device.url, device.name, device.ip_address, device.port, device.use_https, 
                      device.end_with_video, device.status))
                 
                 device_id = cursor.lastrowid
@@ -267,9 +269,9 @@ class DatabaseManager:
             with self.get_connection() as conn:
                 conn.execute("""
                     UPDATE devices 
-                    SET url = ?, ip_address = ?, port = ?, use_https = ?, end_with_video = ?, status = ?
+                    SET url = ?, name = ?, ip_address = ?, port = ?, use_https = ?, end_with_video = ?, status = ?
                     WHERE id = ?
-                """, (device.url, device.ip_address, device.port, device.use_https, 
+                """, (device.url, device.name, device.ip_address, device.port, device.use_https, 
                      device.end_with_video, device.status, device.id))
                 
                 conn.commit()
@@ -325,9 +327,9 @@ class DatabaseManager:
                 conn.execute("DELETE FROM devices")
                 for new_id, d in enumerate(devices, 1):
                     conn.execute("""
-                        INSERT INTO devices (id, url, ip_address, port, use_https, end_with_video, status, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (new_id, d.url, d.ip_address, d.port, d.use_https, d.end_with_video,
+                        INSERT INTO devices (id, url, name, ip_address, port, use_https, end_with_video, status, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (new_id, d.url, d.name, d.ip_address, d.port, d.use_https, d.end_with_video,
                           d.status, d.created_at, d.updated_at))
 
                 # Reset the autoincrement counter
@@ -681,11 +683,55 @@ class DatabaseManager:
                 conn.commit()
 
                 logger.debug(f"Logged {detection_type} detection: {entity_name} (confidence: {confidence})")
-                return True
+                return cursor.lastrowid
 
         except Exception as e:
             logger.error(f"Failed to log detection: {e}")
-            return False
+            return None
+
+    def set_detection_sent(self, log_id: int, sent: bool) -> None:
+        """Record whether the alert for an event actually went out."""
+        with self.get_connection() as conn:
+            conn.execute("UPDATE detection_logs SET notification_sent = ? WHERE id = ?", (sent, log_id))
+            conn.commit()
+
+    def set_detection_caption(self, log_id: int, caption: str) -> None:
+        """Attach the VLM's one-liner to an event once it arrives."""
+        with self.get_connection() as conn:
+            conn.execute("UPDATE detection_logs SET caption = ? WHERE id = ?", (caption, log_id))
+            conn.commit()
+
+    def get_detection(self, log_id: int) -> Optional[DetectionLog]:
+        with self.get_connection() as conn:
+            row = conn.execute("SELECT * FROM detection_logs WHERE id = ?", (log_id,)).fetchone()
+            return DetectionLog.from_dict(dict(row)) if row else None
+
+    def detections_per_hour(self, hours: int = 24) -> List[Tuple[int, int]]:
+        """(detections, alerts) for each of the last ``hours`` hours, oldest first."""
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                """SELECT (strftime('%s','now') - strftime('%s', detected_at)) / 3600 AS ago,
+                          COUNT(*), SUM(notification_sent)
+                   FROM detection_logs WHERE detected_at >= datetime('now', ?)
+                   GROUP BY ago""", (f"-{hours} hours",)).fetchall()
+        by_hour = {int(ago): (n, int(a or 0)) for ago, n, a in rows}
+        return [by_hour.get(h, (0, 0)) for h in range(hours - 1, -1, -1)]
+
+    def counts_today(self) -> Dict[str, int]:
+        """Alerts sent today and how often each known name was seen."""
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                """SELECT entity_name, notification_sent, COUNT(*) FROM detection_logs
+                   WHERE detected_at >= datetime(date('now', 'localtime'), 'utc')
+                   GROUP BY entity_name, notification_sent"""
+            ).fetchall()
+        return {f"{name}|{int(bool(sent))}": n for name, sent, n in rows}
+
+    def last_seen(self) -> Dict[str, str]:
+        """entity_name -> latest detected_at, for the roster cards."""
+        with self.get_connection() as conn:
+            rows = conn.execute("SELECT entity_name, MAX(detected_at) FROM detection_logs GROUP BY entity_name").fetchall()
+        return {name: seen for name, seen in rows if name}
 
     def log_system_metric(self, metric_type: str, metric_value: float, unit: str = None) -> bool:
         """
@@ -783,40 +829,36 @@ class DatabaseManager:
             logger.error(f"Failed to get database stats: {e}")
             return {}
 
-    def get_recent_detections(self, limit: int = 50,
-                              detection_type: str = None) -> List[DetectionLog]:
+    def get_recent_detections(self, limit: int = 50, detection_type: str = None,
+                              alerts_only: bool = False, days: int = None) -> List[DetectionLog]:
         """
-        Get recent detection logs, optionally of one type only.
+        Recent detection logs, newest first.
 
         Args:
-            limit: Maximum rows to return, newest first
-            detection_type: 'human' or 'animal' to filter; None for all
+            limit: Maximum rows.
+            detection_type: 'human' or 'animal'; None for both.
+            alerts_only: Only rows where a notification went out.
+            days: Only the last N days; None for all time.
 
         Returns:
             List of DetectionLog rows
         """
         try:
+            clauses, params = [], []
+            if detection_type:
+                clauses.append("detection_type = ?")
+                params.append(detection_type)
+            if alerts_only:
+                clauses.append("notification_sent = 1")
+            if days:
+                clauses.append("detected_at >= datetime('now', ?)")
+                params.append(f"-{days} days")
+            where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
             with self.get_connection() as conn:
-                if detection_type:
-                    cursor = conn.execute(
-                        """SELECT * FROM detection_logs
-                           WHERE detection_type = ?
-                           ORDER BY detected_at DESC LIMIT ?""",
-                        (detection_type, limit)
-                    )
-                else:
-                    cursor = conn.execute(
-                        """SELECT * FROM detection_logs
-                           ORDER BY detected_at DESC LIMIT ?""",
-                        (limit,)
-                    )
-
-                detections = []
-                for row in cursor.fetchall():
-                    detection = DetectionLog.from_dict(dict(row))
-                    detections.append(detection)
-
-                return detections
+                cursor = conn.execute(
+                    f"SELECT * FROM detection_logs {where} ORDER BY detected_at DESC LIMIT ?", (*params, limit)
+                )
+                return [DetectionLog.from_dict(dict(row)) for row in cursor.fetchall()]
 
         except Exception as e:
             logger.error(f"Failed to get recent detections: {e}")

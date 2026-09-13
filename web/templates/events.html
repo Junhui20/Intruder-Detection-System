@@ -1,24 +1,26 @@
 {% extends "base.html" %}{% block title %}Events{% endblock %}{% block body %}
-<form method="get" class="inline">
-  <select name="type" onchange="this.form.submit()">
-    <option value="" {{ "selected" if not type }}>all</option>
-    <option value="human" {{ "selected" if type == "human" }}>people</option>
-    <option value="animal" {{ "selected" if type == "animal" }}>animals</option>
-  </select>
-  <select name="limit" onchange="this.form.submit()">
-    {% for n in (50, 200, 1000) %}<option value="{{ n }}" {{ "selected" if limit == n }}>last {{ n }}</option>{% endfor %}
-  </select>
-</form>
-<table>
-  <tr><th></th><th>When</th><th>Who</th><th>Confidence</th><th>Alerted</th></tr>
-  {% for r in rows %}
-  <tr>
-    <td>{% if r.image_path %}{% set photo = "/photo/" ~ (r.image_path|basename|urlencode) %}<a href="{{ photo }}"><img class="thumb" src="{{ photo }}" alt=""></a>{% endif %}</td>
-    <td>{{ r.detected_at }}</td>
-    <td>{{ r.entity_name or "Unknown" }} <span class="muted">({{ r.detection_type }})</span></td>
-    <td>{{ "%.0f%%"|format(100 * (r.confidence or 0)) }}</td>
-    <td>{{ "yes" if r.notification_sent else "" }}</td>
-  </tr>
-  {% else %}<tr><td colspan="5" class="muted">Nothing yet.</td></tr>{% endfor %}
-</table>
+<h1>Events</h1>
+<p class="lede">Every detection the system logged, newest first. Alerts are the red ones; family is logged but never sent.</p>
+<div class="panel">
+  <form class="hd" method="get">Filter
+    <span class="r">
+      <select class="btn sm" name="type" onchange="this.form.submit()"><option value="" {{ 'selected' if not type }}>everything</option><option value="human" {{ 'selected' if type == 'human' }}>people</option><option value="animal" {{ 'selected' if type == 'animal' }}>animals</option></select>
+      <select class="btn sm" name="alerts" onchange="this.form.submit()"><option value="false" {{ 'selected' if not alerts }}>all</option><option value="true" {{ 'selected' if alerts }}>alerts only</option></select>
+      <select class="btn sm" name="days" onchange="this.form.submit()">{% for d, l in ((1, 'today'), (7, 'last 7 days'), (30, 'last 30 days'), (0, 'all time')) %}<option value="{{ d }}" {{ 'selected' if days == d }}>{{ l }}</option>{% endfor %}</select>
+    </span></form>
+  <div class="tablewrap"><table class="cardy">
+    <tr><th></th><th>When</th><th>Who</th><th>Caption</th><th>Conf.</th><th>Alert</th></tr>
+    {% for r in rows %}
+    <tr data-act="event" data-id="{{ r.id }}" class="stripe {{ 'bad' if r.notification_sent else 'ok' }}" style="cursor:pointer">
+      <td>{% if r.image_path %}<div class="th" style="width:56px;height:42px;border-radius:3px;background:url(/photo/{{ r.image_path|basename|urlencode }}) center/cover"></div>{% endif %}</td>
+      <td class="mono" data-l="when">{{ r.detected_at|local }}</td>
+      <td class="lead"><b>{{ r.entity_name or 'Unknown' }}</b> <span class="muted mono" style="font-size:11px">{{ r.detection_type }}</span></td>
+      <td data-l="caption">{{ r.caption or '' }}</td>
+      <td class="mono" data-l="conf.">{{ "%.0f"|format(100 * (r.confidence or 0)) }} %</td>
+      <td data-l="alert">{% if r.notification_sent %}<span class="pill bad">sent</span>{% else %}<span class="pill">family</span>{% endif %}</td>
+    </tr>
+    {% else %}<tr><td colspan="6" class="muted">Nothing in this range.</td></tr>{% endfor %}
+  </table></div>
+  <div class="note">Tap a row for the photo full size; an unknown can be enrolled from the live frame.</div>
+</div>
 {% endblock %}
