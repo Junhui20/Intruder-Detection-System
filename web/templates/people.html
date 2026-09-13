@@ -1,10 +1,10 @@
 {% extends "base.html" %}{% block title %}People & pets{% endblock %}{% block body %}
 <h1>People &amp; pets</h1>
 <p class="lede">Anyone here is family: seen, logged, never alerted. Three or more photos per pet; for people one clear face is enough.</p>
-{% set classes_html %}{% for id, kind in classes.items() %}<option value="{{ id }}">{{ kind }}</option>{% endfor %}{% endset %}
+<script type="application/json" id="animal-classes">{{ classes|tojson }}</script>
 {% for title, rows, kind in (('People', people, 'human'), ('Pets', pets, 'animal')) %}
 <div class="panel" style="margin-bottom:14px">
-  <div class="hd">{{ title }} <span class="r"><button class="btn sm primary" data-act="enrol-{{ 'person' if kind == 'human' else 'pet' }}" data-classes="{{ classes_html|e }}">Enrol {{ 'person' if kind == 'human' else 'pet' }}</button></span></div>
+  <div class="hd">{{ title }} <span class="r"><button class="btn sm primary" data-act="enrol-{{ 'person' if kind == 'human' else 'pet' }}">Enrol {{ 'person' if kind == 'human' else 'pet' }}</button></span></div>
   <div class="bd cards">
     {% for r in rows %}
     <div class="card">
@@ -14,7 +14,7 @@
       </div>
     </div>
     {% endfor %}
-    <div class="card add" data-act="enrol-{{ 'person' if kind == 'human' else 'pet' }}" data-classes="{{ classes_html|e }}">+ Enrol {{ 'from a photo<br>or from the live frame' if kind == 'human' else 'a pet' }}</div>
+    <div class="card add" data-act="enrol-{{ 'person' if kind == 'human' else 'pet' }}">+ Enrol {{ 'a person' if kind == 'human' else 'a pet' }}</div>
   </div>
   {% if kind == 'animal' %}<div class="note"><span class="tag">Test</span> runs the recogniser on the current live frame and shows the score against this entry, so you know before an alert does.</div>{% endif %}
 </div>

@@ -213,3 +213,18 @@ label.tierbox.on{border-color:var(--accent);background:var(--accent-soft)}
 }
 @media (prefers-reduced-motion:no-preference){.livedot.go{animation:pulse 2s infinite}}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 22%,transparent)}50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--bad) 8%,transparent)}}
+
+/* panel headers and filters wrap cleanly on phones */
+.panel > .hd{flex-wrap:wrap}
+.panel > .hd .r{flex-wrap:wrap}
+@media (max-width:640px){
+  .panel > .hd .r{width:100%;margin-left:0;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+  .panel > .hd .r > .btn,.panel > .hd .r > select{width:100%;justify-content:center}
+  .panel > .hd .r > .btn.primary{grid-column:1/-1}
+  h1{margin-top:4px}
+  .lede{font-size:14px}
+  .cards{grid-template-columns:1fr 1fr}
+  .card .cb .row{flex-wrap:wrap}
+  .card.add{min-height:150px}
+}
+.card .cb .row .btn{flex:1;padding:4px 4px;justify-content:center}
