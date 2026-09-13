@@ -31,6 +31,7 @@ class Settings:
     pet_model: str = ""  # DINOv2 checkpoint; empty = dinov2-small (low) / dinov2-base (high)
     captions_enabled: bool = True  # one-line VLM description on each alert photo
     captions_model: str = ""  # Ollama model; empty = qwen2.5vl:3b (low) / qwen2.5vl:7b (high)
+    notify_family: bool = False  # also send a (photo, no caption) message when family arrives
     ollama_host: str = "http://localhost:11434"
 
     # Detection settings (user configurable)

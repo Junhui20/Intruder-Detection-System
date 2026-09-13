@@ -1,17 +1,22 @@
-{% extends "base.html" %}{% block title %}People{% endblock %}{% block body %}
-<table>
-  <tr><th>Name</th><th>Photos</th><th></th></tr>
-  {% for r in rows %}
-  <tr>
-    <td>{{ r.name }}</td>
-    <td>{{ photo_count(r) }}</td>
-    <td><button hx-delete="/enrol/human/{{ r.id }}" hx-target="closest tr" hx-swap="outerHTML" hx-confirm="Forget {{ r.name }}?">forget</button></td>
-  </tr>
-  {% else %}<tr><td colspan="3" class="muted">Nobody enrolled — every person is an intruder.</td></tr>{% endfor %}
-</table>
-<form class="card" method="post" action="/enrol/human" enctype="multipart/form-data">
-  <label>Name <input name="name" required></label>
-  <label>Photos of their face <input type="file" name="photos" accept="image/*" multiple required></label>
-  <button>Enrol</button>
-</form>
+{% extends "base.html" %}{% block title %}People & pets{% endblock %}{% block body %}
+<h1>People &amp; pets</h1>
+<p class="lede">Anyone here is family: seen, logged, never alerted. Three or more photos per pet; for people one clear face is enough.</p>
+{% set classes_html %}{% for id, kind in classes.items() %}<option value="{{ id }}">{{ kind }}</option>{% endfor %}{% endset %}
+{% for title, rows, kind in (('People', people, 'human'), ('Pets', pets, 'animal')) %}
+<div class="panel" style="margin-bottom:14px">
+  <div class="hd">{{ title }} <span class="r"><button class="btn sm primary" data-act="enrol-{{ 'person' if kind == 'human' else 'pet' }}" data-classes="{{ classes_html|e }}">Enrol {{ 'person' if kind == 'human' else 'pet' }}</button></span></div>
+  <div class="bd cards">
+    {% for r in rows %}
+    <div class="card">
+      <div class="ph" style="background:url(/roster/{{ r.id }}/photo/0) center/cover"><small>{{ r.photo_count }} photo{{ 's' if r.photo_count != 1 }}</small></div>
+      <div class="cb"><b>{{ r.name }}</b><span class="meta">{% if kind == 'animal' %}{{ classes.get(r.coco_class_id, '?') }} · {% endif %}{% if r.seen %}seen {{ r.seen|clock }}{% else %}not seen yet{% endif %}</span>
+        <div class="row"><button class="btn sm" data-act="photos" data-id="{{ r.id }}">Photos</button><button class="btn sm" data-act="testrec" data-id="{{ r.id }}" data-name="{{ r.name }}" data-kind="{{ kind }}">Test</button><button class="btn sm danger" data-act="forget" data-id="{{ r.id }}" data-name="{{ r.name }}">Forget</button></div>
+      </div>
+    </div>
+    {% endfor %}
+    <div class="card add" data-act="enrol-{{ 'person' if kind == 'human' else 'pet' }}" data-classes="{{ classes_html|e }}">+ Enrol {{ 'from a photo<br>or from the live frame' if kind == 'human' else 'a pet' }}</div>
+  </div>
+  {% if kind == 'animal' %}<div class="note"><span class="tag">Test</span> runs the recogniser on the current live frame and shows the score against this entry, so you know before an alert does.</div>{% endif %}
+</div>
+{% endfor %}
 {% endblock %}

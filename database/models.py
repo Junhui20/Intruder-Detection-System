@@ -19,6 +19,7 @@ class Device:
     """
     id: Optional[int] = None
     url: str = ""
+    name: str = ""
     ip_address: str = ""
     port: int = 8080
     use_https: bool = False
@@ -41,6 +42,7 @@ class Device:
         return {
             'id': self.id,
             'url': self.url,
+            'name': self.name,
             'ip_address': self.ip_address,
             'port': self.port,
             'use_https': self.use_https,
@@ -56,6 +58,7 @@ class Device:
         return cls(
             id=data.get('id'),
             url=data.get('url') or '',
+            name=data.get('name') or '',
             ip_address=data.get('ip_address', ''),
             port=data.get('port', 8080),
             use_https=bool(data.get('use_https', False)),
@@ -222,6 +225,7 @@ class DetectionLog:
     camera_id: Optional[int] = None
     image_path: Optional[str] = None
     notification_sent: bool = False
+    caption: Optional[str] = None
     detected_at: Optional[datetime] = None
     
     def to_dict(self) -> Dict[str, Any]:
@@ -234,6 +238,7 @@ class DetectionLog:
             'camera_id': self.camera_id,
             'image_path': self.image_path,
             'notification_sent': self.notification_sent,
+            'caption': self.caption,
             'detected_at': self.detected_at
         }
     
@@ -248,6 +253,7 @@ class DetectionLog:
             camera_id=data.get('camera_id'),
             image_path=data.get('image_path'),
             notification_sent=bool(data.get('notification_sent', False)),
+            caption=data.get('caption'),
             detected_at=data.get('detected_at')
         )
 
@@ -358,6 +364,7 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS devices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     url TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL DEFAULT '',
     ip_address TEXT NOT NULL,
     port INTEGER NOT NULL,
     use_https BOOLEAN DEFAULT 0,
@@ -408,6 +415,7 @@ CREATE TABLE IF NOT EXISTS detection_logs (
     camera_id INTEGER,
     image_path TEXT,
     notification_sent BOOLEAN DEFAULT 0,
+    caption TEXT,
     detected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (camera_id) REFERENCES devices(id)
 );

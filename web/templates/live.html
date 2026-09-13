@@ -1,12 +1,39 @@
 {% extends "base.html" %}{% block title %}Live{% endblock %}{% block body %}
-<p>
-  {% if detecting %}<img class="live" src="/stream" alt="live view">{% else %}<span class="muted">Detection is stopped.</span>{% endif %}
-</p>
-<form method="post" action="/detection" class="inline">
-  <input type="hidden" name="on" value="{{ 'false' if detecting else 'true' }}">
-  <button>{{ "Stop detection" if detecting else "Start detection" }}</button>
-</form>
-<span class="muted">
-  {% if cameras %}{{ cameras|length }} camera(s){% if active is not none %}, showing #{{ active }}{% endif %}{% else %}no cameras — <a href="/cameras">add one</a>{% endif %}
-</span>
+<div class="grid two">
+  <div class="panel">
+    <div class="hd">{{ title }}
+      {% if strip.detecting %}<span class="pill ok">live</span>{% else %}<span class="pill">stopped</span>{% endif %}
+    </div>
+    <div class="video {{ '' if strip.detecting else 'off' }}" id="video">
+      {% if strip.detecting %}<img src="/stream" alt="live view" style="width:100%;height:100%;object-fit:contain;display:block">{% endif %}
+    </div>
+    <form class="toggles">
+      <label class="sw"><input type="checkbox" name="human" {{ 'checked' if toggles.human }}> People</label>
+      <label class="sw"><input type="checkbox" name="animal" {{ 'checked' if toggles.animal }}> Animals</label>
+      <label class="sw"><input type="checkbox" name="face" {{ 'checked' if toggles.face }}> Face recognition</label>
+      <label class="sw"><input type="checkbox" name="pet" {{ 'checked' if toggles.pet }}> Pet re-ID</label>
+      <label class="sw"><input type="checkbox" name="captions" {{ 'checked' if toggles.captions }}> Captions</label>
+    </form>
+    <div class="actions">
+      <button class="btn primary" data-act="snapshot">Snapshot</button>
+      <button class="btn" data-act="pick">Enrol from this frame…</button>
+      <button class="btn" data-act="reset">Reset tracking</button>
+      {% if strip.detecting %}<button class="btn danger" data-act="detection" data-on="false">Stop detection</button>{% else %}<button class="btn primary" data-act="detection" data-on="true">Start detection</button>{% endif %}
+      <span class="hint">{% if not cameras %}No cameras yet — <a href="/cameras">add one</a>; the local webcam is the fallback.{% else %}Enrol crops the chosen box and saves it as a photo of that person or pet.{% endif %}</span>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="hd">Recent <span class="r"><a class="pill" href="/events">all events</a></span></div>
+    <div class="feed">
+      {% for r in recent %}
+      <div data-act="event" data-id="{{ r.id }}" class="ev stripe {{ 'bad' if r.notification_sent else 'ok' }}">
+        <div class="th" {% if r.image_path %}style="background:url(/photo/{{ r.image_path|basename|urlencode }}) center/cover"{% endif %}></div>
+        <div><div class="who">{{ r.entity_name or 'Unknown' }}</div><div class="what">{{ r.caption or r.detection_type }}</div></div>
+        <div class="t">{{ r.detected_at|clock }}<br>{{ "%.0f"|format(100 * (r.confidence or 0)) }} %</div>
+      </div>
+      {% else %}<div class="note">Nothing yet. Events appear here as people and animals are seen.</div>{% endfor %}
+    </div>
+    <div class="note">Red = alert sent · green = family, logged only. Captions arrive after the photo.</div>
+  </div>
+</div>
 {% endblock %}
