@@ -28,6 +28,9 @@ import signal
 import threading
 import time
 import warnings
+
+import cv2
+import numpy as np
 from typing import Optional, Any, Dict, List
 from pathlib import Path
 
@@ -76,18 +79,9 @@ class IntruderDetectionSystem:
         self.config_path = config_path
         self.running = False
         self.detection_active = False
-
-        # Detection tracking for deduplication
-        self.current_detections = {
-            'humans': set(),  # Track currently detected humans
-            'animals': set()  # Track currently detected animals
-        }
-        self.detection_timeout = 10.0  # seconds without detection before considering object "left"
-        self.last_detection_time = {}
-
-        # Enhanced tracking for better deduplication
-        self.detection_sessions = {}  # Track detection sessions to avoid duplicates
-        self.session_timeout = 30.0  # seconds before a new session can start for same identity
+        self.started_at = time.time()
+        self.detection_timeout = 10.0  # seconds out of frame before the same identity is a new visit
+        self.last_detection_time: Dict[str, float] = {}  # "kind_name" -> last seen
 
         # FPS monitoring (handled by performance_tracker)
         # self.fps_monitor = None  # Removed - using performance_tracker instead
@@ -106,6 +100,8 @@ class IntruderDetectionSystem:
         self.notification_system: Optional[NotificationSystem] = None
         self.performance_tracker: Optional[PerformanceTracker] = None
         self.latest_frame = None  # newest annotated frame, for the web UI's MJPEG stream
+        self.latest_raw = None  # the same frame before boxes were drawn: what enrolment crops
+        self.latest_detections: dict = {"humans": [], "animals": []}  # of that frame
         
         # Threading
         self.detection_thread: Optional[threading.Thread] = None
@@ -292,6 +288,7 @@ class IntruderDetectionSystem:
                 return True
 
             self.notification_system = NotificationSystem(bot_token, self.db_manager, system=self)
+            self.notification_system.default_cooldown = self.settings.notification_cooldown
             if self.settings.captions_enabled:
                 try:  # a caption problem must never cost the alert channel
                     self.captioner = EventCaptioner(
@@ -396,7 +393,7 @@ class IntruderDetectionSystem:
 
             if self.detection_thread:
                 self.detection_thread.join(timeout=5)
-            self.latest_frame = None
+            self.latest_frame = self.latest_raw = None
 
             logger.info("Detection system stopped")
             system_logger.log_shutdown("Detection system")
@@ -411,7 +408,6 @@ class IntruderDetectionSystem:
         logger.info("Detection loop started")
 
         frame_count = 0
-        process_every_n_frames = getattr(self.settings, 'process_every_n_frames', 1)
 
         while self.detection_active and not self.shutdown_event.is_set():
             try:
@@ -428,8 +424,8 @@ class IntruderDetectionSystem:
                     self.performance_tracker.fps_tracker.update()
 
                 # Skip processing for performance if configured
-                if frame_count % process_every_n_frames != 0:
-                    self.latest_frame = frame
+                if frame_count % max(1, int(self.settings.process_every_n_frames)) != 0:
+                    self.latest_frame = self.latest_raw = frame
                     continue
 
                 # Perform object detection only on selected frames
@@ -451,10 +447,10 @@ class IntruderDetectionSystem:
                         frame, detections['animals']
                     )
                 
-                # Handle notifications and alerts
                 self._process_detections(detections, frame)
-
+                self.latest_raw = frame
                 self.latest_frame = ImageProcessor.create_detection_overlay(frame, detections)
+                self.latest_detections = detections
 
                 # Adaptive delay based on FPS
                 if self.performance_tracker:
@@ -472,318 +468,132 @@ class IntruderDetectionSystem:
         
         logger.info("Detection loop ended")
 
-    def _get_grid_position(self, bbox, grid_size=100):
-        """Get grid position for bbox to create stable detection IDs."""
-        if not bbox or len(bbox) < 4:
-            return "0_0"
-
-        # Calculate center point of bbox
-        center_x = (bbox[0] + bbox[2]) // 2
-        center_y = (bbox[1] + bbox[3]) // 2
-
-        # Convert to grid coordinates
-        grid_x = center_x // grid_size
-        grid_y = center_y // grid_size
-
-        return f"{grid_x}_{grid_y}"
-
-    def _is_new_detection_session(self, session_id: str, current_time: float) -> bool:
+    def _process_detections(self, detections: dict, frame) -> None:
         """
-        Check if this is a new detection session.
+        Turn this frame's detections into events.
 
-        Args:
-            session_id: Unique identifier for the detection session
-            current_time: Current timestamp
-
-        Returns:
-            True if this is a new session that should be logged
+        A session is one visit by one identity ("human_Hui", "animal_Unknown dog"):
+        it opens on first sight, is logged once, and can reopen after the identity
+        has been out of frame for ``detection_timeout`` seconds.
         """
-        # If we've never seen this identity, it's a new session
-        if session_id not in self.detection_sessions:
-            return True
+        now = time.time()
+        for sid, last in list(self.last_detection_time.items()):
+            if now - last >= self.detection_timeout:
+                del self.last_detection_time[sid]
+        seen = []
+        for human in detections["humans"]:
+            known = human.get("recognition_status") == "known"
+            name = human["identity"] if known else "Unknown person"
+            seen.append(("human", name, known, human.get("face_confidence") if known else human.get("confidence", 0),
+                         human.get("bbox"), None, "person"))
+        for animal in detections["animals"]:
+            known = animal.get("recognition_status") == "known_pet"
+            kind_name = animal.get("animal_type", "animal")
+            name = animal["pet_identity"] if known else f"Unknown {kind_name}"
+            seen.append(("animal", name, known, animal.get("identification_confidence") if known else animal.get("confidence", 0),
+                         animal.get("bbox"), animal.get("class_id"), kind_name))
+        for kind, name, known, confidence, bbox, class_id, subject in seen:
+            sid = f"{kind}_{name}"
+            if sid not in self.last_detection_time:  # a new visit
+                self._record(kind, name, known, float(confidence or 0), frame, bbox, class_id, subject)
+            self.last_detection_time[sid] = now
 
-        # If currently being tracked, not a new session
-        if session_id in self.current_detections['humans'] or session_id in self.current_detections['animals']:
-            return False
-
-        # If the object left (not in current_detections) and enough time has passed, it's a new session
-        last_seen = self.last_detection_time.get(session_id, 0)
-        if current_time - last_seen >= self.detection_timeout:
-            return True
-
-        return False
-
-    def _process_detections(self, detections: dict, frame):
-        """Process detection results and handle notifications."""
-        try:
-            import time
-            current_time = time.time()
-
-            # Clean up old detections (objects that left the camera)
-            self._cleanup_old_detections(current_time)
-
-            # Clean up old detection sessions
-            self._cleanup_old_sessions(current_time)
-
-            # Process human detections
-            for human in detections['humans']:
-                identity = human.get('identity', 'Unknown')
-                confidence = human.get('confidence', 0) * 100  # Convert to percentage
-                face_confidence = human.get('face_confidence', 0) * 100  # Convert to percentage
-                bbox = human.get('bbox', (0, 0, 0, 0))
-
-                # Create session identifier based on identity only (not position)
-                session_id = f"human_{identity}"
-
-                # Check if this is a new detection session
-                is_new_session = self._is_new_detection_session(session_id, current_time)
-
-                if is_new_session:
-                    # Start new detection session
-                    self.detection_sessions[session_id] = current_time
-                    self.current_detections['humans'].add(session_id)
-
-                    notification_sent = False
-                    photo_path = None
-
-                    # Check if this is an unknown person (multiple conditions)
-                    is_unknown = (
-                        human.get('recognition_status') == 'unknown' or
-                        identity == 'Unknown' or
-                        identity == 'unknown'
-                    )
-
-                    if is_unknown:
-                        photo_path, notification_sent = self._alert(
-                            'human', f"🚨 Unknown person detected (confidence: {confidence:.1f}%)",
-                            frame, 'unknown_human', confidence, 'person', bbox=bbox,
-                        )
-
-                    # Log detection to database
-                    if self.db_manager:
-                        self.db_manager.log_detection(
-                            detection_type='human',
-                            entity_name=identity,
-                            confidence=face_confidence / 100 if face_confidence > 0 else confidence / 100,
-                            camera_id=None,  # Will be enhanced when camera management is improved
-                            image_path=photo_path,
-                            notification_sent=notification_sent
-                        )
-
-                    # Legacy logging
-                    from utils.logger import detection_logger
-                    detection_logger.log_human_detection(
-                        identity,
-                        face_confidence / 100,  # Convert back to decimal for logging
-                        human.get('bbox', (0, 0, 0, 0))
-                    )
-
-
-                # Update last seen time for this session
-                self.last_detection_time[session_id] = current_time
-            
-            # Process animal detections
-            for animal in detections['animals']:
-                confidence = animal.get('confidence', 0) * 100  # Convert to percentage
-                identification_confidence = animal.get('identification_confidence', 0) * 100
-                animal_type = animal.get('animal_type', 'animal')
-                bbox = animal.get('bbox', (0, 0, 0, 0))
-
-                if animal.get('recognition_status') == 'known_pet':
-                    pet_identity = animal.get('pet_identity', 'Unknown')
-                    session_id = f"animal_{pet_identity}"
-
-                    # Check if this is a new detection session
-                    is_new_session = self._is_new_detection_session(session_id, current_time)
-
-                    if is_new_session:
-                        # Start new detection session
-                        self.detection_sessions[session_id] = current_time
-                        self.current_detections['animals'].add(session_id)
-
-                        # Log detection to database
-                        if self.db_manager:
-                            self.db_manager.log_detection(
-                                detection_type='animal',
-                                entity_name=pet_identity,
-                                confidence=identification_confidence / 100,
-                                camera_id=None,  # Will be enhanced when camera management is improved
-                                notification_sent=False  # Known animals don't trigger notifications
-                            )
-
-                        # Legacy logging - Known pet identified
-                        from utils.logger import detection_logger
-                        detection_logger.log_pet_identification(
-                            pet_identity,
-                            identification_confidence / 100,  # Convert back to decimal
-                            animal.get('identification_method', 'unknown')
-                        )
-
-
-                    # Update last seen time
-                    self.last_detection_time[session_id] = current_time
-
-                else:
-                    # Unknown animal
-                    session_id = f"animal_Unknown_{animal_type}"
-
-                    # Check if this is a new detection session
-                    is_new_session = self._is_new_detection_session(session_id, current_time)
-
-                    if is_new_session:
-                        # Start new detection session
-                        self.detection_sessions[session_id] = current_time
-                        self.current_detections['animals'].add(session_id)
-
-                        notification_sent = False
-                        photo_path = None
-
-                        # Check if this is an unknown animal (multiple conditions)
-                        is_unknown_animal = (
-                            animal.get('recognition_status') == 'unknown_animal' or
-                            animal_type.lower() in ['unknown', 'unidentified'] or
-                            confidence > 0  # Any detected animal for now
-                        )
-
-                        if is_unknown_animal:
-                            photo_path, notification_sent = self._alert(
-                                'animal', f"🐾 Unknown {animal_type} detected (confidence: {confidence:.1f}%)",
-                                frame, f'unknown_{animal_type}', confidence, animal_type,
-                                bbox=animal.get('bbox'), class_id=animal.get('class_id'),
-                            )
-
-                        # Log detection to database
-                        if self.db_manager:
-                            self.db_manager.log_detection(
-                                detection_type='animal',
-                                entity_name=f"Unknown {animal_type}",
-                                confidence=confidence / 100,
-                                camera_id=None,  # Will be enhanced when camera management is improved
-                                image_path=photo_path,
-                                notification_sent=notification_sent
-                            )
-
-
-                    # Update last seen time
-                    self.last_detection_time[session_id] = current_time
-            
-        except Exception as e:
-            logger.error(f"Error processing detections: {e}")
-
-    def _cleanup_old_detections(self, current_time):
-        """Remove detections that haven't been seen recently."""
-        try:
-            # Find expired detections
-            expired_detections = []
-            for session_id, last_seen in self.last_detection_time.items():
-                if current_time - last_seen >= self.detection_timeout:
-                    expired_detections.append(session_id)
-
-            # Remove expired detections
-            for session_id in expired_detections:
-                # Remove from tracking sets
-                if session_id.startswith('human_'):
-                    self.current_detections['humans'].discard(session_id)
-                elif session_id.startswith('animal_'):
-                    self.current_detections['animals'].discard(session_id)
-
-                # Remove from timing tracking
-                del self.last_detection_time[session_id]
-
-                # Keep session record for session_timeout period to prevent immediate re-detection
-                # The session will be cleaned up later when session_timeout expires
-
-        except Exception as e:
-            logger.debug(f"Error cleaning up old detections: {e}")
-
-    def _cleanup_old_sessions(self, current_time):
-        """Remove old detection sessions that have expired."""
-        try:
-            expired_sessions = []
-            for session_id, session_start in self.detection_sessions.items():
-                # Clean up sessions that are older than session_timeout
-                if current_time - session_start > self.session_timeout:
-                    expired_sessions.append(session_id)
-
-            for session_id in expired_sessions:
-                del self.detection_sessions[session_id]
-
-        except Exception as e:
-            logger.debug(f"Error cleaning up old sessions: {e}")
-
-    def _alert(self, kind: str, message: str, frame, label: str, confidence: float, subject: str,
-               bbox=None, class_id=None):
+    def _record(self, kind, name, known, confidence, frame, bbox, class_id, subject) -> None:
         """
-        Save the frame and notify Telegram; the VLM's one-liner is added under
-        the photo once it is ready.
-
-        Sending and captioning run on a thread so the detection loop is not
-        held up. The photo goes out first — a caption takes 1 s on a GPU and
-        10+ s on a CPU, and an intruder alert should not wait for it.
-
-        Returns:
-            (photo_path, whether a notification was queued)
+        Log one visit; alert Telegram about strangers, caption the photo when
+        the VLM is up. Sending and captioning run on a thread so the detection
+        loop is never held up; the photo goes out first, the caption is edited
+        in under it — and stored on the event — when it arrives.
         """
-        photo_path = self._capture_detection_screenshot(frame, label, confidence)
-        if not self.notification_system or time.time() < self.notification_system.muted_until:
-            return photo_path, False  # nobody is told: no bot, or /disarm or /mute
+        bot = self.notification_system
+        muted = not bot or time.time() < bot.muted_until
+        photo_path = None if known and not self.settings.notify_family else self._save_photo(frame, f"{kind}_{name}")
+        will_alert = not muted and (not known or self.settings.notify_family)
+        log_id = self.db_manager.log_detection(
+            detection_type=kind, entity_name=name, confidence=confidence, image_path=photo_path,
+            notification_sent=False,  # the send thread sets it once a message has gone out
+        ) if self.db_manager else None
+        logger.info(f"{name} ({kind}, {confidence:.0%}){'' if will_alert else ', no alert'}")
+        if not will_alert:
+            return
+        message = (f"👋 {name} is home" if known else
+                   f"🚨 Unknown person detected ({confidence:.0%})" if kind == "human" else
+                   f"🐾 Unknown {subject} detected ({confidence:.0%})")
         snapshot = frame.copy()
-
         context = {"kind": kind, "label": subject, "bbox": bbox, "class_id": class_id}
 
         def send():
             try:
-                sent = self.notification_system.send_notification(kind, message, photo_path=photo_path, context=context)
-                if not (sent and photo_path and self.captioner):
+                sent = bot.send_notification(kind, message, photo_path=photo_path, context=context)
+                if sent and log_id:
+                    self.db_manager.set_detection_sent(log_id, True)
+                if not (sent and photo_path and self.captioner and self.settings.captions_enabled) or known:
                     return
                 caption = self.captioner.describe(snapshot, subject)
-                for chat_id, message_id in sent if caption else []:
-                    self.notification_system.edit_caption(chat_id, message_id, f"{message}\n💬 {caption}")
+                if not caption:
+                    return
+                if log_id:
+                    self.db_manager.set_detection_caption(log_id, caption)
+                for chat_id, message_id in sent:
+                    bot.edit_caption(chat_id, message_id, f"{message}\n💬 {caption}")
             except Exception:
                 logger.exception("Alert delivery failed")
 
         threading.Thread(target=send, daemon=True).start()
-        return photo_path, True
 
-    def _capture_detection_screenshot(self, frame, detection_type: str, confidence: float) -> str:
+    def _save_photo(self, frame, label: str) -> Optional[str]:
+        """Write the frame under data/detection_photos; None if that fails."""
+        folder = Path("data/detection_photos")
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{re.sub(r'[^a-z0-9]+', '_', label.lower())}_{time.strftime('%Y%m%d_%H%M%S')}.jpg"
+        return str(path) if cv2.imwrite(str(path), frame) else None
+
+    def snapshot(self) -> Optional[str]:
+        """Save the current frame and send it to every recipient (ignores mute); the path."""
+        if self.latest_frame is None:
+            return None
+        path = self._save_photo(self.latest_frame, "snapshot")
+        if self.notification_system and path:
+            self.notification_system.send_notification("snapshot", "📷 Snapshot", photo_path=path, force=True)
+        return path
+
+    def enrol_from_frame(self, kind: str, name: str, bbox, class_id: Optional[int] = None) -> Optional[int]:
+        """Crop the box out of the current frame and enrol it; the new row id."""
+        if self.latest_raw is None:
+            return None
+        x1, y1, x2, y2 = (int(v) for v in bbox)
+        pad = 20 if kind == "human" else 0
+        crop = self.latest_raw[max(0, y1 - pad):y2 + pad, max(0, x1 - pad):x2 + pad]
+        folder = Path("data/faces" if kind == "human" else "data/animals")
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{re.sub(r'[^a-z0-9]+', '_', name.lower())}_{int(time.time())}.jpg"
+        cv2.imwrite(str(path), crop)
+        return self.enrol(kind, name, [str(path)], class_id)
+
+    def test_entry(self, entry_id: int) -> Optional[dict]:
         """
-        Capture and save screenshot when unknown detection occurs.
-
-        Args:
-            frame: Current camera frame
-            detection_type: Type of detection (e.g., 'unknown_human', 'unknown_dog')
-            confidence: Detection confidence
+        Run the matching recogniser on the current frame against one whitelist row.
 
         Returns:
-            Path to saved screenshot file
+            {score, threshold, match} or None when there is no frame or row.
         """
-        try:
-            import os
-            from datetime import datetime
-
-            # Create detection photos directory
-            photos_dir = "data/detection_photos"
-            os.makedirs(photos_dir, exist_ok=True)
-
-            # Generate filename with timestamp
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{detection_type}_{confidence:.1f}%_{timestamp}.jpg"
-            filepath = os.path.join(photos_dir, filename)
-
-            # Save screenshot
-            import cv2
-            success = cv2.imwrite(filepath, frame)
-
-            if success:
-                logger.info(f"Detection screenshot saved: {filepath}")
-                return filepath
-            else:
-                logger.error(f"Failed to save detection screenshot: {filepath}")
-                return None
-
-        except Exception as e:
-            logger.error(f"Error capturing detection screenshot: {e}")
+        entry = self.db_manager.get_whitelist_entry(entry_id)
+        frame = self.latest_raw
+        if entry is None or frame is None or not (self.face_recognition and self.animal_recognition):
             return None
+        if entry.entity_type == "human":
+            fr = self.face_recognition
+            own = [e for n, e in zip(fr.known_face_names, fr.known_face_encodings) if n == entry.name]
+            faces = fr.app.get(frame) if fr.app and own else []
+            score = max((float(np.stack(own) @ f.normed_embedding).max() for f in faces), default=0.0)
+            return {"score": score, "threshold": fr.confidence_threshold, "match": score >= fr.confidence_threshold}
+        pets = self.animal_recognition
+        pet = pets.known_pets.get(entry.name)
+        boxes = [d["bbox"] for d in self.latest_detections.get("animals", []) if d.get("class_id") == entry.coco_class_id]
+        crops = [frame[y1:y2, x1:x2] for x1, y1, x2, y2 in boxes] or [frame]
+        score = max((float((pet["embeddings"] @ q).max()) for q in pets.embed(crops)), default=0.0) if pet else 0.0
+        return {"score": score, "threshold": pets.pet_identification_threshold,
+                "match": score >= pets.pet_identification_threshold}
 
     def enrol(self, kind: str, name: str, photo_paths: List[str], class_id: Optional[int] = None):
         """
@@ -825,6 +635,47 @@ class IntruderDetectionSystem:
             self.face_recognition.load_known_faces(rows)
         elif kind == "animal" and self.animal_recognition:
             self.animal_recognition.load_known_pets(rows)
+
+    # what the Settings page may change, with the type system_config stores
+    TUNABLE = {
+        "human_confidence_threshold": "float", "pet_identification_threshold": "float",
+        "yolo_confidence": "float", "process_every_n_frames": "integer",
+        "captions_enabled": "boolean", "captions_model": "string",
+        "notify_family": "boolean", "notification_cooldown": "integer",
+    }
+
+    def apply_settings(self, changes: Dict[str, Any]) -> None:
+        """
+        Change tunables live and remember them in the database, which
+        Settings.load_from_database reads back at the next start.
+
+        Args:
+            changes: Subset of TUNABLE keys with their new values (already typed).
+        """
+        for key, value in changes.items():
+            if key not in self.TUNABLE:
+                continue
+            setattr(self.settings, key, value)
+            if self.db_manager:
+                self.db_manager.set_config(key, value, self.TUNABLE[key])
+        if "human_confidence_threshold" in changes and self.face_recognition:
+            self.face_recognition.confidence_threshold = changes["human_confidence_threshold"]
+            self.detection_config.human_confidence_threshold = changes["human_confidence_threshold"]
+        if "pet_identification_threshold" in changes and self.animal_recognition:
+            self.animal_recognition.pet_identification_threshold = changes["pet_identification_threshold"]
+            self.detection_config.pet_identification_threshold = changes["pet_identification_threshold"]
+        if "yolo_confidence" in changes and self.detection_engine:
+            e = self.detection_engine
+            e.confidence = e.human_confidence = e.animal_confidence = changes["yolo_confidence"]
+        if "notification_cooldown" in changes and self.notification_system:
+            self.notification_system.default_cooldown = changes["notification_cooldown"]
+        if ("captions_model" in changes or changes.get("captions_enabled")) and self.notification_system:
+            try:
+                self.captioner = EventCaptioner(
+                    self.settings.captions_model or CAPTION_MODELS[self.settings.tier], self.settings.ollama_host
+                ) if self.settings.captions_enabled else None
+            except Exception as e:
+                logger.warning(f"Event captions off: {e}")
 
     def apply_tier(self, tier: str) -> None:
         """

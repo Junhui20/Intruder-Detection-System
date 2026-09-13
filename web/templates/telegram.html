@@ -1,22 +1,30 @@
 {% extends "base.html" %}{% block title %}Telegram{% endblock %}{% block body %}
-<table>
-  <tr><th>Chat ID</th><th>Username</th><th>People</th><th>Animals</th><th></th></tr>
-  {% for r in rows %}
-  <tr>
-    <td>{{ r.chat_id }}</td>
-    <td>{{ r.telegram_username }}</td>
-    <td>{{ "yes" if r.notify_human_detection else "" }}</td>
-    <td>{{ "yes" if r.notify_animal_detection else "" }}</td>
-    <td><button hx-delete="/telegram/{{ r.chat_id }}" hx-target="closest tr" hx-swap="outerHTML" hx-confirm="Stop alerting {{ r.telegram_username }}?">remove</button></td>
-  </tr>
-  {% else %}<tr><td colspan="5" class="muted">Nobody receives alerts yet. Message your bot, then find your chat id with @userinfobot.</td></tr>{% endfor %}
-</table>
-<form class="card" method="post" action="/telegram">
-  <label>Chat ID <input name="chat_id" type="number" required></label>
-  <label>Username <input name="username" placeholder="optional"></label>
-  <label><span><input type="checkbox" name="humans" value="true" checked> alert on people</span></label>
-  <label><span><input type="checkbox" name="animals" value="true" checked> alert on animals</span></label>
-  <button>Add recipient</button>
-</form>
-<p class="muted">The bot token itself comes from <code>TELEGRAM_BOT_TOKEN</code> in <code>.env</code>.</p>
+<h1>Telegram</h1>
+<p class="lede">Who gets alerts, and what they get. The bot token lives in <span class="mono">.env</span>, not here.</p>
+<div class="grid two">
+  <div class="panel">
+    <div class="hd">Recipients <span class="r"><button class="btn sm primary" data-act="add-recipient">Add recipient</button></span></div>
+    <div class="tablewrap"><table class="cardy">
+      <tr><th>Chat</th><th>People</th><th>Animals</th><th></th></tr>
+      {% for r in rows %}
+      <tr data-chat="{{ r.chat_id }}">
+        <td class="lead"><b>{{ r.telegram_username }}</b> <span class="mono muted" style="font-size:11px">{{ r.chat_id }}</span></td>
+        <td data-l="people"><label class="sw"><input type="checkbox" data-prefs="humans" {{ 'checked' if r.notify_human_detection }}></label></td>
+        <td data-l="animals"><label class="sw"><input type="checkbox" data-prefs="animals" {{ 'checked' if r.notify_animal_detection }}></label></td>
+        <td><div class="row"><button class="btn sm" data-act="testmsg" data-id="{{ r.chat_id }}" data-name="{{ r.telegram_username }}">Test message</button><button class="btn sm danger" data-act="removerec" data-id="{{ r.chat_id }}" data-name="{{ r.telegram_username }}">Remove</button></div></td>
+      </tr>
+      {% else %}<tr><td colspan="4" class="muted">Nobody receives alerts yet. Message your bot, then find your chat id with @userinfobot.</td></tr>{% endfor %}
+    </table></div>
+    <div class="note">{% if bot_ok %}Bot connected.{% else %}<b>No bot:</b> set <span class="mono">TELEGRAM_BOT_TOKEN</span> in .env and restart.{% endif %} It answers <span class="mono">/status /snapshot /arm /disarm /mute 1h</span>, and <span class="mono">/enroll Name</span> as a reply to an alert photo.</div>
+  </div>
+  <div class="panel">
+    <div class="hd">Delivery</div>
+    <form class="bd form" style="grid-template-columns:1fr">
+      <div class="field"><label for="n-cool">Cooldown per recipient</label><div class="range"><input type="range" id="n-cool" name="cooldown" min="0" max="120" value="{{ cooldown }}" data-fmt="{} s"><output></output></div><span class="help">Seconds between two alerts to the same person.</span></div>
+      <div class="field"><label class="sw"><input type="checkbox" name="captions" value="true" {{ 'checked' if captions }}> Add the VLM caption under the photo</label></div>
+      <div class="field"><label class="sw"><input type="checkbox" name="notify_family" value="true" {{ 'checked' if notify_family }}> Also message when family arrives</label></div>
+      <div><button class="btn primary" type="button" data-act="save-delivery">Save</button></div>
+    </form>
+  </div>
+</div>
 {% endblock %}

@@ -1,24 +1,19 @@
 {% extends "base.html" %}{% block title %}Cameras{% endblock %}{% block body %}
-<table>
-  <tr><th>#</th><th>Stream</th><th></th><th></th></tr>
-  {% for r in rows %}
-  <tr>
-    <td>{{ r.id }}</td>
-    <td><code>{{ r.url }}</code></td>
-    <td><button hx-post="/cameras/{{ r.id }}/test" hx-target="next span">test</button> <span class="muted"></span></td>
-    <td><button hx-delete="/cameras/{{ r.id }}" hx-target="closest tr" hx-swap="outerHTML" hx-confirm="Remove camera {{ r.id }}?">remove</button></td>
-  </tr>
-  {% else %}<tr><td colspan="4" class="muted">No cameras; the local webcam is used.</td></tr>{% endfor %}
-</table>
-<form class="card" method="post" action="/cameras">
-  <label style="grid-column: span 2">Stream URL <input name="url" placeholder="rtsp://user:pw@192.168.1.20:554/stream2 — or fill in the parts below"></label>
-  <label>Protocol <select name="protocol"><option>rtsp</option><option>http</option><option>https</option></select></label>
-  <label>Host <input name="host" placeholder="192.168.1.20"></label>
-  <label>Port <input name="port" type="number" value="0" title="0 = protocol default"></label>
-  <label>Path <input name="path" placeholder="/stream2, /video for DroidCam"></label>
-  <label>Username <input name="username"></label>
-  <label>Password <input name="password" type="password"></label>
-  <button>Add camera</button>
-</form>
-<p class="muted">Vendor paths are listed in docs/CAMERA_SETUP.md.</p>
+<h1>Cameras</h1>
+<p class="lede">RTSP for real cameras, HTTP MJPEG for DroidCam. Edit in place; test before you save.</p>
+<div class="panel">
+  <div class="hd">Connected <span class="r"><button class="btn sm primary" data-act="add-camera">Add camera</button></span></div>
+  <div class="tablewrap"><table class="cardy">
+    <tr><th>Name</th><th>Stream</th><th>Status</th><th></th></tr>
+    {% for r in rows %}
+    <tr>
+      <td class="lead"><b>{{ r.name or 'Camera ' ~ r.id }}</b></td>
+      <td class="mono" data-l="stream">{{ r.url }}</td>
+      <td data-l="status">{% if r.id in live %}<span class="pill ok">connected</span>{% elif r.status != 'active' %}<span class="pill">off</span>{% else %}<span class="pill bad">down</span>{% endif %} <span class="pill test-out" style="display:none"></span></td>
+      <td><div class="row"><button class="btn sm" data-act="testcam" data-id="{{ r.id }}">Test</button><span class="test-out"></span><button class="btn sm" data-act="editcam" data-id="{{ r.id }}" data-name="{{ r.name }}" data-url="{{ r.url }}" data-auto="{{ 'true' if r.status == 'active' else 'false' }}">Edit</button><button class="btn sm danger" data-act="removecam" data-id="{{ r.id }}" data-name="{{ r.name or 'Camera ' ~ r.id }}">Remove</button></div></td>
+    </tr>
+    {% else %}<tr><td colspan="4" class="muted">No cameras; the local webcam is used.</td></tr>{% endfor %}
+  </table></div>
+  <div class="note">Vendor RTSP paths: Tapo <span class="mono">/stream2</span> · Hikvision <span class="mono">/Streaming/Channels/102</span> · Reolink <span class="mono">/h264Preview_01_sub</span> · Dahua <span class="mono">/cam/realmonitor?channel=1&amp;subtype=1</span>. More in docs/CAMERA_SETUP.md.</div>
+</div>
 {% endblock %}

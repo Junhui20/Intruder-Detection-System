@@ -1,0 +1,43 @@
+{% extends "base.html" %}{% block title %}Settings{% endblock %}{% block body %}
+<h1>Settings</h1>
+<p class="lede">The knobs that change what you see. Everything else stays in <span class="mono">config.yaml</span>.</p>
+<form class="grid two">
+  <div>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="hd">Recognition</div>
+      <div class="bd form">
+        <div class="field"><label for="s-face">Face match threshold</label><div class="range"><input type="range" id="s-face" name="human_confidence_threshold" min="0.2" max="0.8" step="0.01" value="{{ dc.human_confidence_threshold }}"><output></output></div><span class="help">Cosine. Strangers score below 0.2; lower it if family gets flagged.</span></div>
+        <div class="field"><label for="s-pet">Pet match threshold</label><div class="range"><input type="range" id="s-pet" name="pet_identification_threshold" min="0.3" max="0.9" step="0.01" value="{{ dc.pet_identification_threshold }}"><output></output></div><span class="help">≈ 1 % false accepts on DogFaceNet at 0.65.</span></div>
+        <div class="field"><label for="s-yolo">Detector confidence</label><div class="range"><input type="range" id="s-yolo" name="yolo_confidence" min="0.2" max="0.9" step="0.01" value="{{ dc.yolo_confidence }}"><output></output></div></div>
+        <div class="field"><label for="s-skip">Process every</label><select id="s-skip" name="process_every_n_frames">{% for n in (1, 2, 3, 5) %}<option value="{{ n }}" {{ 'selected' if s.process_every_n_frames == n }}>{{ n }} frame{{ 's' if n > 1 }}</option>{% endfor %}</select></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="hd">Captions</div>
+      <div class="bd form">
+        <div class="field"><label class="sw"><input type="checkbox" name="captions_enabled" value="true" {{ 'checked' if s.captions_enabled }}> Describe alert photos with a local VLM</label></div>
+        <div class="field"><label for="s-model">Model</label><input id="s-model" name="captions_model" value="{{ s.captions_model }}" placeholder="tier default (qwen2.5vl:3b / 7b)"><span class="help">Ollama at {{ s.ollama_host }} · {{ 'model loaded' if ollama else 'not reachable — captions off' }}</span></div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="hd">Tier</div>
+      <div class="bd">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <label class="panel tierbox {{ 'on' if s.tier == 'low' }}"><input type="radio" name="tier" value="low" {{ 'checked' if s.tier == 'low' }}> <b>Low</b><div class="mono" style="font-size:11.5px;color:var(--ink-2);margin-top:4px">buffalo_sc · dinov2-small · qwen 3b<br>31 FPS on 4 CPU threads</div></label>
+          <label class="panel tierbox {{ 'on' if s.tier == 'high' }}"><input type="radio" name="tier" value="high" {{ 'checked' if s.tier == 'high' }}> <b>High</b><div class="mono" style="font-size:11.5px;color:var(--ink-2);margin-top:4px">buffalo_l · dinov2-base · qwen 7b<br>117 FPS on the RTX 3050</div></label>
+        </div>
+        <div class="note" style="border:0;padding:10px 0 0">Switching reloads the models live (~10 s); the choice is written to config.yaml.</div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="hd">Web UI</div>
+      <div class="bd form" style="grid-template-columns:1fr">
+        <div class="field"><label for="s-bind">Listening on</label><input id="s-bind" value="{{ bind }}" readonly><span class="help">LAN only. Reach it over Tailscale; never port-forward.</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="actions" style="border:0;padding:0;grid-column:1/-1"><button class="btn primary" type="button" data-act="save-settings">Save settings</button><span class="hint">Saved values apply immediately; nothing here needs a restart.</span></div>
+</form>
+{% endblock %}

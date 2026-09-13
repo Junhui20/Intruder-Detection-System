@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% block title %}Status{% endblock %}{% block body %}
+<h1>Status</h1>
+<p class="lede">Today on this machine. Numbers come from the same counters <span class="mono">bench.py</span> reads.</p>
+<div class="tiles" style="margin-bottom:14px">
+  <div class="tile"><div class="k">Detection</div><div class="v">{{ strip.fps }} <span style="font-size:14px;color:var(--ink-3)">FPS</span></div><div class="s">{{ detector }} · tier {{ strip.tier }}</div></div>
+  <div class="tile"><div class="k">Alerts today</div><div class="v">{{ alerts }}</div><div class="s">{{ people }} people, {{ pets }} pets enrolled</div></div>
+  <div class="tile"><div class="k">Family seen today</div><div class="v">{{ family.values()|sum }}</div><div class="s">{% for n, c in family.items() %}{{ n }} {{ c }}{{ ' · ' if not loop.last }}{% else %}nobody yet{% endfor %}</div></div>
+  <div class="tile"><div class="k">Captions</div><div class="v" style="font-size:18px">{{ caption_model or 'off' }}</div><div class="s">{{ 'Ollama loaded' if caption_model else 'Ollama not reachable' }}</div></div>
+  <div class="tile"><div class="k">Memory</div><div class="v">{{ (rss / 1024)|round(1) }} <span style="font-size:14px;color:var(--ink-3)">GB</span></div><div class="s">RSS · up {{ uptime }}</div></div>
+</div>
+<div class="panel">
+  <div class="hd">Detections per hour <span class="r"><span class="pill">last 24 h</span></span></div>
+  <div class="bd" style="padding-bottom:6px">
+    {% set top = ([hours|map(attribute=0)|max, 1]|max) %}
+    <svg class="spark" viewBox="0 0 720 120" preserveAspectRatio="none" role="img" aria-label="detections per hour, last 24 hours">
+      <g stroke="var(--line)" stroke-width="1"><line x1="30" y1="10" x2="700" y2="10"/><line x1="30" y1="60" x2="700" y2="60"/><line x1="30" y1="110" x2="700" y2="110"/></g>
+      <g font-family="IBM Plex Mono,monospace" font-size="10" fill="var(--ink-3)"><text x="0" y="14">{{ top }}</text><text x="0" y="64">{{ (top / 2)|round|int }}</text><text x="0" y="114">0</text></g>
+      {% set pts = [] %}{% for n, a in hours %}{% set _ = pts.append((30 + loop.index0 * 670 / 23)|round(1) ~ ' ' ~ (110 - 100 * n / top)|round(1)) %}{% endfor %}
+      <path d="M{{ pts|join(' L') }} L700 110 L30 110 Z" fill="var(--accent)" fill-opacity=".12"/>
+      <path d="M{{ pts|join(' L') }}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+      <g stroke="var(--bad)" stroke-width="2">{% for n, a in hours %}{% if a %}<line x1="{{ (30 + loop.index0 * 670 / 23)|round(1) }}" y1="112" x2="{{ (30 + loop.index0 * 670 / 23)|round(1) }}" y2="118"/>{% endif %}{% endfor %}</g>
+    </svg>
+  </div>
+  <div class="legend"><span><i></i>detections</span><span><i style="background:var(--bad)"></i>hours with an alert</span><span style="margin-left:auto">24 h ago → now</span></div>
+</div>
+{% endblock %}
