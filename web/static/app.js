@@ -107,7 +107,7 @@ document.addEventListener('change', async ev => {
   if (t.matches('.toggles input')) { const f = new FormData(); $('.toggles').querySelectorAll('input').forEach(i => f.set(i.name, i.checked)); await post('/toggles', f); toast(`${t.parentElement.textContent.trim()} ${t.checked ? 'on' : 'off'}`); }
   if (t.matches('[data-prefs]')) { const row = t.closest('[data-chat]'); const f = new FormData(); row.querySelectorAll('[data-prefs]').forEach(i => f.set(i.dataset.prefs, i.checked)); await post(`/telegram/${row.dataset.chat}/prefs`, f); toast('Saved.', 'ok'); }
   if (t.name === 'tier') { await post('/tier', { tier: t.value }); toast(`Switching to ${t.value} tier — reloading models (~10 s)…`); document.querySelectorAll('label.tierbox').forEach(l => l.classList.toggle('on', l.contains(t))); }
-  if (t.matches('#cam-pick')) { location.href = '/?camera=' + t.value; }
+  if (t.matches('#cam-pick')) { try { await post('/camera', { camera_id: t.value }); location.reload(); } catch (e) { toast(e.message, 'bad'); } }
 });
 document.querySelectorAll('.range').forEach(r => { const i = r.querySelector('input'), o = r.querySelector('output'); const fmt = i.dataset.fmt || '{}'; const show = () => o.textContent = fmt.replace('{}', i.step && i.step.includes('.') ? (+i.value).toFixed(2) : i.value); i.addEventListener('input', show); show(); });
 $('#scrim').addEventListener('click', e => { if (e.target.id === 'scrim') closeModal(); });

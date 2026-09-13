@@ -162,10 +162,19 @@ def create_app(system, password: str) -> FastAPI:
             request,
             "live.html",
             cameras=cameras,
+            active=active,
             title=title,
             toggles=toggles,
             recent=db.get_recent_detections(limit=8),
         )
+
+    @app.post("/camera")
+    def pick_camera(camera_id: int = Form(...)):
+        if not system.camera_manager or not system.camera_manager.switch_camera(
+            camera_id
+        ):
+            raise HTTPException(409, "that camera is not connected")
+        return JSONResponse({"active": camera_id})
 
     @app.get("/stream")
     def stream():
