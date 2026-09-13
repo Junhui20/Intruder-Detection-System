@@ -31,12 +31,14 @@ def open_stream(url: str) -> cv2.VideoCapture:
     Open a camera URL with the settings that keep it live.
 
     Args:
-        url: ``rtsp://``, ``http://`` or ``https://`` stream URL.
+        url: ``rtsp://``, ``http://`` or ``https://`` stream URL, or ``usb:N``.
 
     Returns:
         The capture; check ``isOpened()``.
     """
-    if url.startswith("rtsp://"):
+    if url.startswith("usb:"):  # a webcam on this machine, by index
+        cap = cv2.VideoCapture(int(url[4:]))
+    elif url.startswith("rtsp://"):
         cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
     else:
         cap = cv2.VideoCapture(url)
