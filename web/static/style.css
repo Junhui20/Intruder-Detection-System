@@ -47,12 +47,12 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--body);pa
 .nav a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:4px;color:var(--ink-2);text-decoration:none;font-weight:500;cursor:pointer;border:1px solid transparent}
 .nav a:hover{background:var(--panel-2);color:var(--ink)}
 .nav a.on{background:var(--accent-soft);color:var(--ink);border-color:transparent}
-.nav a svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .nav a .n{margin-left:auto;font:500 11px var(--mono);color:var(--ink-3)}
 .nav a.on .n{color:var(--accent)}
 .side .foot{margin-top:auto;padding:10px 10px 0;border-top:1px solid var(--line);font:12px var(--mono);color:var(--ink-3)}
 /* status strip */
 .strip{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 14px;margin-bottom:14px}
+.strip .facts{display:contents}
 .strip .item{display:flex;align-items:baseline;gap:6px;font:500 12px var(--mono);color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase}
 .strip .item b{font:600 15px var(--display);color:var(--ink);letter-spacing:.01em;text-transform:none;font-variant-numeric:tabular-nums}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block;box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 25%,transparent)}
@@ -192,3 +192,24 @@ label.tierbox{padding:12px;cursor:pointer}
 label.tierbox.on{border-color:var(--accent);background:var(--accent-soft)}
 .muted{color:var(--ink-3)}
 .test-out:empty{display:none}
+
+/* nav: a live dot instead of icons */
+.livedot{width:8px;height:8px;border-radius:50%;background:var(--line-2);flex:none}
+.livedot.go{background:var(--bad);box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 22%,transparent)}
+.nav a{gap:8px}
+/* panel header: name · pill · picker */
+.panel > .hd .name{font:600 15px var(--display);letter-spacing:0;text-transform:none;color:var(--ink)}
+@media (max-width:820px){
+  .strip{display:grid;grid-template-columns:1fr auto;gap:8px 12px;align-items:center}
+  .strip .state{grid-column:1}
+  .strip .arm{grid-column:2;grid-row:1;width:auto;margin:0}
+  .strip .arm .btn{flex:none}
+  .strip .facts{display:grid;grid-column:1/-1;grid-template-columns:1fr 1fr;gap:4px 12px;padding-top:6px;border-top:1px solid var(--line)}
+  .strip .facts .item{justify-content:space-between}
+  .toggles{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+  .actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .actions .btn{justify-content:center}
+  .actions .hint{grid-column:1/-1}
+}
+@media (prefers-reduced-motion:no-preference){.livedot.go{animation:pulse 2s infinite}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 22%,transparent)}50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--bad) 8%,transparent)}}
