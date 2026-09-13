@@ -114,6 +114,12 @@ I-frame / GOP interval to 1–2 s — the connection test waits for a keyframe a
 gives up after 5 s; and turn off the camera's own motion-detection overlays so
 they do not confuse the detector.
 
+### USB webcam
+
+A webcam plugged into the machine running the system is a camera like any
+other: Cameras → protocol `usb`, host `0` (the first device; `1` for the
+next). Or paste `usb:0` as the URL. On Linux that is `/dev/video0`.
+
 ## 🖥️ Local Camera Setup
 
 ### USB Webcam Configuration

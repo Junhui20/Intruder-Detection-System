@@ -90,7 +90,7 @@ const acts = {
 function camForm(d) {
   return `<form id="enrol-form" method="post" action="/cameras${d.id ? '/' + d.id : ''}"><div class="form">${field('c-name', 'Name', `<input id="c-name" name="name" value="${esc(d.name || '')}" placeholder="Front gate">`)}
     <div class="field" style="grid-column:1/-1"><label for="c-url">Stream URL</label><input id="c-url" name="url" value="${esc(d.url || '')}" placeholder="rtsp://user:pw@192.168.1.20:554/stream2"><span class="help">Or fill the parts below. Credentials go in the URL.</span></div>
-    ${field('c-proto', 'Protocol', '<select id="c-proto" name="protocol"><option>rtsp</option><option>http</option><option>https</option></select>')}${field('c-host', 'Host', '<input id="c-host" name="host" placeholder="192.168.1.20">')}
+    ${field('c-proto', 'Protocol', '<select id="c-proto" name="protocol"><option>rtsp</option><option>http</option><option>https</option><option>usb</option></select>')}${field('c-host', 'Host (or USB index)', '<input id="c-host" name="host" placeholder="192.168.1.20 — or 0 for usb">')}
     ${field('c-port', 'Port', '<input id="c-port" name="port" value="0" title="0 = protocol default">')}${field('c-path', 'Path', '<input id="c-path" name="path" placeholder="/stream2, /video for DroidCam">')}
     ${field('c-user', 'Username', '<input id="c-user" name="username">')}${field('c-pass', 'Password', '<input id="c-pass" name="password" type="password">')}
     <div class="field"><label>&nbsp;</label><label class="sw"><input type="checkbox" name="auto" value="true" ${d.auto === 'false' ? '' : 'checked'}> Connect on startup</label></div></div>
