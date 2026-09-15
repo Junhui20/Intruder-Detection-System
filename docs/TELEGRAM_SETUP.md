@@ -326,19 +326,17 @@ curl "https://api.telegram.org/bot<YOUR_TOKEN>/getMe"
 
 ### Diagnostic Commands
 
-**Test Bot Connection:**
-```python
-python scripts/test_telegram_bot.py --token YOUR_TOKEN
+**Test the token and see who has messaged the bot** (registered chat IDs
+appear under `result[].message.chat`):
+```bash
+curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getMe"
+curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getUpdates"
 ```
 
-**Check User Registration:**
-```python
-python scripts/check_telegram_users.py
-```
-
-**Send Test Notification:**
-```python
-python scripts/send_test_notification.py --chat-id YOUR_CHAT_ID
+**Send a test message:**
+```bash
+curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+  -d chat_id=YOUR_CHAT_ID -d text="intruder-detection test"
 ```
 
 ## 📊 Performance Considerations

@@ -13,21 +13,10 @@
 ### Development Installation
 
 ```bash
-# Clone repository
-git clone <repository-url>
-cd intruder-detection-system
-
-# Create virtual environment
-python -m venv venv
-venv\Scripts\activate  # Windows
-# source venv/bin/activate  # Linux/Mac
-
-# Install development dependencies
-pip install -r requirements.txt
-pip install -r requirements-dev.txt  # If exists
-
-# Install in development mode
-pip install -e .
+git clone https://github.com/Junhui20/Intruder-Detection-System.git
+cd Intruder-Detection-System
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt -r requirements-dev.txt
 ```
 
 ## 📁 Project Architecture
@@ -69,14 +58,8 @@ database/
 
 ### 1. Setting Up Development Environment
 
-```bash
-# Install development tools
-pip install black flake8 pytest pytest-cov
-
-# Set up pre-commit hooks (optional)
-pip install pre-commit
-pre-commit install
-```
+`requirements-dev.txt` is the whole toolchain: pytest, black, flake8. There
+are no pre-commit hooks; run `black . && flake8` before a PR.
 
 ### 2. Code Style Guidelines
 
@@ -350,15 +333,10 @@ class PerformanceMonitor:
 
 ## 🚀 Deployment
 
-### Production Build
-```bash
-# Create production build
-python setup.py build
-
-# Create installer
-python setup.py bdist_wininst  # Windows
-python setup.py bdist_rpm      # Linux
-```
+The app is run from a checkout — there is no package build. On the machine
+that will run it: clone, `pip install -r requirements.txt`, write `.env`
+(`python scripts/setup_secure_config.py`), and start `python main.py` under
+your service manager of choice (a systemd unit or a Windows scheduled task).
 
 ### Configuration Management
 ```python

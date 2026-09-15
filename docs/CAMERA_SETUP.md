@@ -291,9 +291,11 @@ cap = cv2.VideoCapture(url, cv2.CAP_GSTREAMER)
 ### Diagnostic Tools
 
 #### Camera Connection Test
-```python
-# Test camera connectivity
-python scripts/test_camera_connection.py --url http://192.168.1.100:8080/video
+```bash
+# Does the stream answer at all?
+curl -sI http://192.168.1.100:8080/video | head -1
+# Can OpenCV read a frame from it?
+python -c "import cv2; c=cv2.VideoCapture('http://192.168.1.100:8080/video'); print(c.read()[0])"
 ```
 
 #### Network Diagnostics

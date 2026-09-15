@@ -162,8 +162,9 @@ WEB_UI_PASSWORD=choose-one python main.py   # web UI on http://<this machine>:80
 Without `WEB_UI_PASSWORD` the web UI does not start; detection and Telegram
 still run. Put the variable in `.env` to make it stick.
 
-`requirements-dev.txt` adds pytest, black and flake8. GPU users: `python
-scripts/install.py --gpu` installs the CUDA build of PyTorch.
+`requirements-dev.txt` adds pytest, black and flake8. GPU users: install the
+CUDA build of PyTorch first (see [docs/INSTALLATION.md](docs/INSTALLATION.md)),
+then `pip install -r requirements.txt`.
 
 **Linux and Windows** on Python 3.12 and 3.14 are what CI tests; macOS is
 untested.

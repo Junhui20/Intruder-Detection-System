@@ -203,5 +203,8 @@ data/**/*.jpg
 data/**/*.jpeg
 data/**/*.png
 
-# Downloaded by bench.py for the YOLO11n-vs-YOLO26n comparison
-models/yolo26n.pt
+# Only the base weights are tracked. bench.py downloads yolo26n.pt; the
+# .onnx/.torchscript/.engine exports are machine-specific and
+# core/model_optimization.py regenerates them on first run.
+models/*
+!models/yolo11n.pt

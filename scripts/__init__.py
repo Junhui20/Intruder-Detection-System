@@ -1,12 +1,6 @@
-"""
-Utility scripts for the Intruder Detection System.
+"""One-time setup helpers. Everything else the app does for itself on first run
+(directories, database schema, optimized model exports).
 
-This package contains installation and setup utilities:
-- install.py: Smart installation with dependency checking
-- check_dependencies.py: Comprehensive dependency verification
-- setup_environment.py: Environment setup and configuration
-- migrate_database.py: Database migration utilities
+- setup_secure_config.py: writes .env (Telegram token, web UI password)
+- setup_ollama.py: installs Ollama and pulls the caption model for a tier
 """
-
-__version__ = "1.0.0"
-__author__ = "Intruder Detection System Team"
