@@ -121,6 +121,23 @@ class TestConfigurationSecurity(unittest.TestCase):
             if 'TELEGRAM_BOT_TOKEN' in os.environ:
                 del os.environ['TELEGRAM_BOT_TOKEN']
     
+    def test_database_rows_do_not_reset_settings_they_dont_store(self):
+        """The bot token and web address survive the database load at startup."""
+        from unittest import mock
+        from database.database_manager import DatabaseManager
+        with open(self.test_config_file, 'w') as f:
+            yaml.dump({'web': {'host': '127.0.0.1', 'port': 8123}}, f)
+        with mock.patch.dict(os.environ, {'TELEGRAM_BOT_TOKEN': 'env_token'}):
+            settings = Settings.load_with_env_support(str(self.test_config_file))
+        db = DatabaseManager(str(self.test_dir / "t.db"))
+        db.set_config('yolo_confidence', 0.7, 'float')
+
+        settings = Settings.load_from_database(db, settings)
+
+        self.assertEqual((settings.web_host, settings.web_port), ('127.0.0.1', 8123))
+        self.assertEqual(settings.bot_token, 'env_token')
+        self.assertEqual(settings.yolo_confidence, 0.7)
+
     def test_secure_config_loading(self):
         """Test secure configuration loading functions."""
         # Test with no environment variable set
