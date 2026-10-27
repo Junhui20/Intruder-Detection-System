@@ -202,8 +202,8 @@ class IntruderDetectionSystem:
         try:
             self.db_manager = DatabaseManager(self.settings.database_path)
             
-            # Update configurations from database
-            self.settings = Settings.load_from_database(self.db_manager)
+            # Database rows go on top of config.yaml + env, not in place of them
+            self.settings = Settings.load_from_database(self.db_manager, self.settings)
             self.detection_config.update_from_database(self.db_manager)
             self.camera_config_manager.load_from_database(self.db_manager)
             

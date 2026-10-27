@@ -9,7 +9,7 @@ import os
 import yaml
 import logging
 from typing import Dict, Any, Optional
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 
 # Import environment configuration manager
 from config.env_config import get_config, get_secure_config
@@ -252,12 +252,14 @@ class Settings:
             return False
     
     @classmethod
-    def load_from_database(cls, db_manager) -> 'Settings':
+    def load_from_database(cls, db_manager, base: Optional['Settings'] = None) -> 'Settings':
         """
         Load settings from database.
         
         Args:
             db_manager: DatabaseManager instance
+            base: Settings the database rows go on top of; keys the database
+                doesn't store (web address, bot token, models) keep their value
             
         Returns:
             Settings instance
@@ -265,7 +267,7 @@ class Settings:
         try:
             config_dict = db_manager.get_all_config()
             
-            settings = cls()
+            settings = replace(base) if base else cls()
             for key, value in config_dict.items():
                 if hasattr(settings, key):
                     setattr(settings, key, value)
@@ -275,7 +277,7 @@ class Settings:
             
         except Exception as e:
             logger.error(f"Error loading settings from database: {e}")
-            return cls()
+            return base or cls()
     
     def save_to_database(self, db_manager) -> bool:
         """
